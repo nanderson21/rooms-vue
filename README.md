@@ -1,4 +1,4 @@
-# Rooms Vue Preview
+# Rooms Vue
 
 A preview environment for the rooms-vue project, which refactors the media browsing and review/approval components from Backstage (built with Astro.js) into Vue.js components.
 
