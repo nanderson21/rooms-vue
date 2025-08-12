@@ -8,6 +8,7 @@ import RoomView from './views/RoomView.vue'
 import RoomContentDetail from './views/RoomContentDetail.vue'
 import SpacesView from './views/SpacesView.vue'
 import FilmStripDemoView from './views/FilmStripDemoView.vue'
+import DataAnalysisView from './views/DataAnalysisView.vue'
 import './assets/main.css'
 
 // Font Awesome
@@ -117,6 +118,13 @@ const routes = [
     path: '/film-strip-demo',
     component: FilmStripDemoView,
     name: 'film-strip-demo',
+    meta: { transition: 'view' }
+  },
+  // Data Analysis route
+  {
+    path: '/data-analysis',
+    component: DataAnalysisView,
+    name: 'data-analysis',
     meta: { transition: 'view' }
   }
 ]

@@ -10,6 +10,7 @@
           Spaces
         </router-link>
         <router-link to="/film-strip-demo" class="nav-link">Film Strip Demo</router-link>
+        <router-link to="/data-analysis" class="nav-link">Data Analysis</router-link>
       </nav>
       <div class="header-actions">
         <button class="debug-toggle" @click="toggleDebugMode" v-if="isDebugVisible">Debug</button>

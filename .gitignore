@@ -25,4 +25,5 @@ coverage
 *.ntvs*
 *.njsproj
 *.sln
-*.sw? 
+*.sw? public/assets/blnco-20250416.tgz
+src/datasets/Wasabi-transfer.json

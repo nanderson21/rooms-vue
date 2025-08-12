@@ -1,49 +1,165 @@
-# Rooms Vue
+# Rooms Vue - Data Analysis Dashboard
 
-A preview environment for the rooms-vue project, which refactors the media browsing and review/approval components from Backstage (built with Astro.js) into Vue.js components.
+A Vue.js application featuring interactive data visualization and analysis capabilities powered by Neo4j graph database.
 
-## Development Setup
+## Features
 
-To preview the application:
+### Core Application
+- **Collection Management**: Grid and detail views with smooth transitions
+- **Room System**: Interactive room-based content organization  
+- **Video Players**: Advanced video playback with scrubbing controls
+- **Responsive Design**: Mobile-friendly interface
 
-1. Install dependencies:
-   ```
-   npm install
-   ```
+### Data Analysis Dashboard (NEW)
+- **Neo4j Integration**: Graph database for complex data relationships
+- **Interactive Visualizations**: D3.js-powered charts and graphs
+- **Multiple View Types**:
+  - Tree structure visualization of directory hierarchies
+  - Statistical analysis with file distribution charts
+  - File explorer with real-time search
+  - Large files analysis and identification
+- **Dataset Management**: Support for multiple JSON datasets
 
-2. Run the development server:
-   ```
-   npm run dev
-   ```
+## Quick Start
 
-3. Open your browser and navigate to:
-   ```
-   http://localhost:4000
-   ```
+### Prerequisites
+- Node.js 16+ 
+- Docker (for Neo4j database)
 
-## Features Implemented
+### Installation
 
-- Collection Grid/List View
-  - Toggle between grid and list views
-  - View transitions for smooth navigation
+1. **Clone and install dependencies:**
+```bash
+npm install
+```
 
-- Media Item Detail View
-  - Video player with comment markers and controls
-  - Comment system with timeline integration
-  - Tabbed interface for comments and file info
+2. **Start Neo4j database:**
+```bash
+docker-compose up -d
+```
 
-- Video Player with Comments
-  - Custom video player with embedded comment markers
-  - Timeline scrubbing
-  - Fullscreen support
+3. **Ingest your datasets:**
+```bash
+npm run ingest
+```
+
+4. **Start development server:**
+```bash
+npm run dev
+```
+
+5. **Access the application:**
+- Main app: http://localhost:5173
+- Data Analysis: http://localhost:5173/data-analysis
+- Neo4j Browser: http://localhost:7474 (neo4j/password123)
 
 ## Project Structure
 
-- `/src/views/CollectionView.vue` - Grid/list view of collection items
-- `/src/views/CollectionItemDetail.vue` - Detail view of a single item
-- `/src/components/VideoPlayerWithComments.vue` - Video player with comment functionality
-- `/src/utils/mockData.js` - Mock data for testing
+```
+src/
+├── components/
+│   ├── DataVisualizer.vue     # Main data visualization component
+│   └── scrubbable/            # Video scrubbing components
+├── datasets/                  # JSON datasets for analysis
+├── scripts/
+│   └── neo4j-ingest.js       # Data ingestion script
+├── services/
+│   └── neo4jService.js       # Neo4j database service
+├── views/
+│   ├── DataAnalysisView.vue   # Data analysis dashboard
+│   └── ...                   # Other application views
+└── main.js                   # Application entry point
+```
 
-## Notes
+## Original Features
 
-This is a preview implementation that focuses on recreating the functionality and UI experience of the original Backstage components. The styling and theming can be adjusted later to match the cs-frontend design system.
+### Media Browsing & Review
+- Collection Grid/List View with toggle between grid and list views
+- Media Item Detail View with video player and comment markers
+- Video Player with Comments including custom timeline scrubbing
+- View transitions for smooth navigation
+- Tabbed interface for comments and file info
+
+## Data Analysis Features
+
+### Dataset Support
+The application can analyze JSON files containing file system metadata with the following structure:
+```json
+[
+  {
+    "name": "filename.ext",
+    "isDir": false,
+    "path": "/full/path/to/file", 
+    "size": 1024,
+    "mtime": "2024-01-01T00:00:00.000Z"
+  }
+]
+```
+
+### Visualization Types
+
+1. **Tree View**: Hierarchical visualization of directory structures
+2. **Statistics Dashboard**: File counts, sizes, and distribution analysis
+3. **File Explorer**: Search and browse files with real-time filtering
+4. **Large Files Analysis**: Identify space-consuming files and directories
+
+### Available Scripts
+
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run preview` - Preview production build
+- `npm run ingest` - Ingest JSON datasets into Neo4j
+
+## Technology Stack
+
+- **Frontend**: Vue 3, Vue Router, D3.js
+- **Database**: Neo4j 5.15 with APOC plugins
+- **Build Tool**: Vite
+- **Styling**: CSS3 with modern features
+- **Icons**: FontAwesome
+
+## Neo4j Database Schema
+
+The application models file system data as a graph:
+
+- **Dataset nodes**: Represent individual JSON datasets
+- **File/Folder nodes**: Represent files and directories
+- **CONTAINS relationships**: Model directory hierarchies
+- **Properties**: Store metadata (size, modification time, etc.)
+
+### Example Cypher Queries
+
+```cypher
+// Find largest files in a dataset
+MATCH (d:Dataset {name: 'my-dataset'})-[:CONTAINS]->(f:File)
+WHERE f.size > 0
+RETURN f.name, f.size, f.path
+ORDER BY f.size DESC
+LIMIT 10
+
+// Get directory structure depth
+MATCH (d:Dataset {name: 'my-dataset'})-[:CONTAINS*]->(item)
+WHERE item.isDir = true
+RETURN item.path, length(split(item.path, '/')) as depth
+ORDER BY depth DESC
+```
+
+## Docker Configuration
+
+The included `docker-compose.yml` sets up Neo4j with:
+- HTTP interface on port 7474
+- Bolt protocol on port 7687
+- APOC plugins enabled
+- Persistent data volumes
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
+
+## License
+
+MIT License - see LICENSE file for details

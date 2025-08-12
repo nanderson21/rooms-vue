@@ -2,15 +2,22 @@
   "name": "rooms-vue-preview",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "ingest": "node src/scripts/neo4j-ingest.js",
+    "ingest-streaming": "node src/scripts/neo4j-ingest-streaming.js",
+    "ingest-zero-error": "node src/scripts/json-to-neo4j.js"
   },
   "dependencies": {
     "@fortawesome/fontawesome-svg-core": "^6.7.2",
     "@fortawesome/free-solid-svg-icons": "^6.7.2",
     "@fortawesome/vue-fontawesome": "^3.0.8",
+    "@types/d3": "^7.4.3",
+    "d3": "^7.9.0",
+    "neo4j-driver": "^5.28.1",
     "video.js": "^8.3.0",
     "vue": "^3.3.4",
     "vue-router": "^4.2.4",
