@@ -20,6 +20,36 @@ This document outlines the development roadmap for the Rooms Vue application, in
 - ✅ D3.js-powered charts and graphs for data insights
 - ✅ Integration into main Vue.js application
 
+### 3. File System Access API Integration (NEW)
+- ✅ File System Access API utility module with directory picker and file scanning
+- ✅ Media processing utilities for thumbnail generation and metadata extraction
+- ✅ Room service for managing file system handles and room data
+- ✅ Integration with SpacesView.vue for creating rooms from local folders
+- ✅ FileSystemRoomView component for displaying folder contents
+- ✅ Support for images, videos, audio, documents with proper thumbnails
+- ✅ Real-time thumbnail generation and media metadata extraction
+- ✅ Permission handling and error states for file system access
+
+## Upcoming Features
+
+### 4. .room Folders with SQLite Metadata Management (PLANNED)
+- See [Room Folders PRD](room-folders-prd.md) for detailed specifications
+- SQLite-based metadata management for enhanced folder organization
+- JSON configuration system for policies and folder behavior
+- Frame.io-style version stacking via drag-and-drop interface
+- Database-driven UI customization and persistent folder states
+- Automatic policy enforcement and workflow management
+- Enhanced file system monitoring and activity logging
+
+### 5. Production Workflow Management System (PLANNED)
+- See [Production Workflow PRD](production-workflow-prd.md) for detailed specifications
+- Production-based hierarchy management with Rooms and Tasks
+- Task-centric navigation replacing pure filesystem browsing
+- Participant and role system with permission-based access
+- Specialized Task UIs (Kanban, Review/Approval, Editorial workflows)
+- Collaborative features with commenting and activity logging
+- Integration with .room folder SQLite database infrastructure
+
 ## Current Architecture
 
 ### Frontend (Vue.js)
@@ -28,6 +58,9 @@ This document outlines the development roadmap for the Rooms Vue application, in
 - D3.js for data visualizations
 - FontAwesome icons
 - Vite build system
+- File System Access API for local folder access
+- Canvas API for thumbnail generation
+- HTML5 Media APIs for video/audio processing
 
 ### Database (Neo4j)
 - Docker-based Neo4j 5.15 deployment

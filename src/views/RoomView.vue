@@ -1,8 +1,8 @@
 <template>
   <div class="room-view">
     <!-- Hero section with room information -->
-    <div class="hero-section" v-if="room.id" v-view-transition-name="`room-card-${room.id}`">
-      <div class="hero-background" v-view-transition-name="`room-thumb-${room.id}`">
+    <div class="hero-section" v-if="room.id">
+      <div class="hero-background">
         <img 
           :src="room.thumbnail || ''" 
           :alt="room.title || 'Room'"
@@ -12,12 +12,12 @@
       </div>
       
       <div class="hero-content">
-        <h1 class="hero-title" v-view-transition-name="`room-title-${room.id}`">
+        <h1 class="hero-title">
           {{ room.title || 'Room' }}
         </h1>
         
         <div class="hero-meta">
-          <span class="hero-meta-text" v-view-transition-name="`room-meta-${room.id}`">
+          <span class="hero-meta-text">
             {{ filteredItems.length }} content items • {{ room.totalSize || '0 KB' }}
           </span>
           <div v-if="room.status !== 'default' && room.statusText" 
@@ -44,7 +44,7 @@
     <!-- Main Content Area with PopoverForm -->
     <div class="content-area">
       <!-- View toggles and PopoverForm -->
-      <div class="view-controls" v-view-transition-name="'header-background'">
+      <div class="view-controls">
         <div class="view-toggles">
           <!-- PopoverForm integration -->
           <div class="popover-container">
@@ -124,14 +124,14 @@
                   class="grid-item"
                   :class="{ 'selected': selectedItemId[item.id] }"
                 >
-                  <div class="item-header" v-view-transition-name="`item-header-${room.id}-${item.id}`">
-                    <h3 class="item-title" v-view-transition-name="`item-title-${room.id}-${item.id}`">{{ item.title }}</h3>
-                    <p class="item-type" v-view-transition-name="`item-type-${room.id}-${item.id}`">{{ item.filetype || item.mimetype }}</p>
+                  <div class="item-header">
+                    <h3 class="item-title">{{ item.title }}</h3>
+                    <p class="item-type">{{ item.filetype || item.mimetype }}</p>
                   </div>
                   
                   <!-- Image content -->
                   <div v-if="isImage(item)" class="item-thumbnail-container">
-                    <div class="thumbnail-wrapper" v-view-transition-name="`image-${room.id}-${item.id}`">
+                    <div class="thumbnail-wrapper">
                       <img 
                         :src="item.thumbnail" 
                         :alt="item.title" 
@@ -142,7 +142,7 @@
                   
                   <!-- Video content -->
                   <div v-else-if="isVideo(item)" class="item-thumbnail-container">
-                    <div class="thumbnail-wrapper" v-view-transition-name="`video-image-${room.id}-${item.id}`">
+                    <div class="thumbnail-wrapper">
                       <img 
                         :src="item.thumbnail" 
                         :alt="item.title" 
@@ -151,7 +151,7 @@
                       <div class="play-button-container">
                         <div 
                           class="play-button"
-                          v-view-transition-name="`play-button-${room.id}-${item.id}`">
+                         >
                           <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none">
                             <polygon points="5 3 19 12 5 21 5 3"></polygon>
                           </svg>
@@ -163,7 +163,7 @@
                   
                   <!-- Audio content -->
                   <div v-else-if="isAudio(item)" class="item-thumbnail-container">
-                    <div class="thumbnail-wrapper" v-view-transition-name="`image-${room.id}-${item.id}`">
+                    <div class="thumbnail-wrapper">
                       <img 
                         :src="item.thumbnail" 
                         :alt="item.title" 

@@ -1,7 +1,7 @@
 <template>
   <div class="collection-view">
-    <div class="hero-section" v-if="collection.id" v-view-transition-name="`collection-card-${collection.id}`">
-      <div class="hero-background" v-view-transition-name="`collection-thumb-${collection.id}`">
+    <div class="hero-section" v-if="collection.id">
+      <div class="hero-background">
         <img 
           :src="collection.thumbnail || ''" 
           :alt="collection.title || 'Collection'"
@@ -11,12 +11,12 @@
       </div>
       
       <div class="hero-content">
-        <h1 class="hero-title" v-view-transition-name="`collection-title-${collection.id}`">
+        <h1 class="hero-title">
           {{ collection.title || 'Collection' }}
         </h1>
         
         <div class="hero-meta">
-          <span class="hero-meta-text" v-view-transition-name="`collection-meta-${collection.id}`">
+          <span class="hero-meta-text">
             {{ filteredItems.length }} items with video preview • {{ collection.totalSize || '0 KB' }}
           </span>
           <div v-if="collection.status !== 'default' && collection.statusText" 
@@ -43,7 +43,7 @@
     <!-- Main Content Area -->
     <div class="content-area">
       <!-- View toggles -->
-      <div class="view-controls" v-view-transition-name="'header-background'">
+      <div class="view-controls">
         <div class="view-toggles">
           <button 
             @click="setViewType('grid')" 
@@ -83,14 +83,14 @@
             class="grid-item"
             :class="{ 'selected': selectedItemId === item.id }"
             @click="setSelectedItem(item.id)">
-            <div class="item-header" v-view-transition-name="`item-header-${collection.id}-${item.id}`">
-              <h3 class="item-title" v-view-transition-name="`item-title-${collection.id}-${item.id}`">{{ item.title }}</h3>
-              <p class="item-type" v-view-transition-name="`item-type-${collection.id}-${item.id}`">{{ item.filetype || item.mimetype }}</p>
+            <div class="item-header">
+              <h3 class="item-title">{{ item.title }}</h3>
+              <p class="item-type">{{ item.filetype || item.mimetype }}</p>
             </div>
             <div class="item-media">
               <!-- Image items -->
               <div v-if="isImage(item)" class="item-thumbnail-container">
-                <div class="thumbnail-wrapper" v-view-transition-name="`image-${collection.id}-${item.id}`">
+                <div class="thumbnail-wrapper">
                   <img 
                     :src="item.thumbnail" 
                     :alt="item.title" 
@@ -101,7 +101,7 @@
               
               <!-- Video items -->
               <div v-else-if="isVideo(item)" class="item-thumbnail-container">
-                <div class="thumbnail-wrapper" v-view-transition-name="`video-image-${collection.id}-${item.id}`">
+                <div class="thumbnail-wrapper">
                   <ScrubbableImage
                     v-if="item.spriteUrl"
                     :spriteUrl="item.spriteUrl"
@@ -114,7 +114,7 @@
                       <div class="play-button-container">
                         <div 
                           class="play-button"
-                          v-view-transition-name="`play-button-${collection.id}-${item.id}`">
+                         >
                           <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none">
                             <polygon points="5 3 19 12 5 21 5 3"></polygon>
                           </svg>
@@ -133,7 +133,7 @@
                 <div v-if="!item.spriteUrl" class="play-button-container">
                   <div 
                     class="play-button"
-                    v-view-transition-name="`play-button-${collection.id}-${item.id}`">
+                   >
                     <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none">
                       <polygon points="5 3 19 12 5 21 5 3"></polygon>
                     </svg>
@@ -144,7 +144,7 @@
               
               <!-- Audio items -->
               <div v-else-if="isAudio(item)" class="item-thumbnail-container">
-                <div class="thumbnail-wrapper" v-view-transition-name="`image-${collection.id}-${item.id}`">
+                <div class="thumbnail-wrapper">
                   <img 
                     :src="item.thumbnail" 
                     :alt="item.title" 
@@ -200,7 +200,7 @@
                       <div 
                         v-if="isImage(item)"
                         class="list-thumbnail-wrapper"
-                        v-view-transition-name="`image-${collection.id}-${item.id}`"
+                       
                       >
                         <img 
                           :src="item.thumbnail" 

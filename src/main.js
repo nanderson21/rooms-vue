@@ -7,6 +7,7 @@ import CollectionItemDetail from './views/CollectionItemDetail.vue'
 import RoomView from './views/RoomView.vue'
 import RoomContentDetail from './views/RoomContentDetail.vue'
 import SpacesView from './views/SpacesView.vue'
+import FileSystemRoomView from './views/FileSystemRoomView.vue'
 import FilmStripDemoView from './views/FilmStripDemoView.vue'
 import DataAnalysisView from './views/DataAnalysisView.vue'
 import './assets/main.css'
@@ -26,7 +27,15 @@ import {
   faPlay,
   faFilePdf,
   faMusic,
-  faImage
+  faImage,
+  faSyncAlt,
+  faSpinner,
+  faExclamationTriangle,
+  faDownload,
+  faFile,
+  faArrowLeft,
+  faChevronDown,
+  faChevronRight
 } from '@fortawesome/free-solid-svg-icons'
 
 // Add icons to the library
@@ -42,7 +51,15 @@ library.add(
   faPlay, 
   faFilePdf, 
   faMusic,
-  faImage
+  faImage,
+  faSyncAlt,
+  faSpinner,
+  faExclamationTriangle,
+  faDownload,
+  faFile,
+  faArrowLeft,
+  faChevronDown,
+  faChevronRight
 )
 
 // Define a proper polyfill for browsers that don't support View Transitions API
@@ -111,6 +128,20 @@ const routes = [
     path: '/spaces',
     component: SpacesView,
     name: 'spaces',
+    meta: { transition: 'view' }
+  },
+  // Filesystem room route
+  {
+    path: '/spaces/filesystem-room/:roomId',
+    component: FileSystemRoomView,
+    name: 'filesystem-room',
+    meta: { transition: 'view' }
+  },
+  // Filesystem room item detail route
+  {
+    path: '/spaces/filesystem-room/:roomId/file/:fileId',
+    component: CollectionItemDetail,
+    name: 'filesystem-room-file',
     meta: { transition: 'view' }
   },
   // Film Strip Demo route

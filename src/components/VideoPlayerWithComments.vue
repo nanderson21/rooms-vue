@@ -4,7 +4,7 @@
       ref="videoElement"
       class="video-element"
       :poster="poster"
-      v-view-transition-name="transitionName"
+     
       @play="onPlay"
       @pause="onPause"
       @timeupdate="onTimeUpdate"
@@ -91,7 +91,7 @@
 </template>
 
 <script>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 
 export default {
   name: 'VideoPlayerWithComments',
@@ -278,16 +278,31 @@ export default {
       return (timestamp / duration.value) * 100;
     };
     
+    // Watch for src changes
+    watch(() => props.src, (newSrc) => {
+      if (!videoElement.value) return;
+      
+      if (newSrc && newSrc.trim() !== '') {
+        videoElement.value.src = newSrc;
+      } else {
+        // Clear the src if it's empty or null
+        videoElement.value.src = '';
+        videoElement.value.load();
+      }
+    });
+
     // Lifecycle hooks
     onMounted(() => {
-      if (!videoElement.value || !props.src) return;
+      if (!videoElement.value) return;
       
-      // Set up video source
-      videoElement.value.src = props.src;
-      
-      // Set up autoplay if enabled
-      if (props.autoPlay) {
-        play();
+      // Only set video source if we have a valid src
+      if (props.src && props.src.trim() !== '') {
+        videoElement.value.src = props.src;
+        
+        // Set up autoplay if enabled
+        if (props.autoPlay) {
+          play();
+        }
       }
       
       // Add mouse movement listener for controls

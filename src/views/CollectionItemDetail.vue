@@ -1,9 +1,9 @@
 <template>
   <div class="item-detail">
     <!-- Item header that transitions from the grid view -->
-    <div class="item-header-container" v-if="mediaItem && mediaItem.id" v-view-transition-name="`item-header-${collectionId || 'default'}-${mediaItem.id || 'default'}`">
+    <div class="item-header-container" v-if="mediaItem && mediaItem.id">
       <div class="item-header-content">
-        <div class="back-nav">
+        <div v-if="!isEmbedded" class="back-nav">
           <router-link :to="`/collection/${collectionId || ''}`" class="back-button">
             <svg width="1em" height="1em" viewBox="0 0 24 24" class="back-icon">
               <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
@@ -11,10 +11,10 @@
             Back
           </router-link>
         </div>
-        <h1 class="item-title" v-view-transition-name="`item-title-${collectionId || 'default'}-${mediaItem.id || 'default'}`">
+        <h1 class="item-title">
           {{ mediaItem ? mediaItem.title : 'Item Details' }}
         </h1>
-        <p class="item-type" v-view-transition-name="`item-type-${collectionId || 'default'}-${mediaItem.id || 'default'}`">{{ mediaItem?.filetype || mediaItem?.mimetype || 'Unknown type' }}</p>
+        <p class="item-type">{{ mediaItem?.filetype || mediaItem?.mimetype || 'Unknown type' }}</p>
       </div>
       
       <div class="item-actions">
@@ -55,7 +55,7 @@
                   class="main-play-button"
                   @click="startPlayback"
                   v-if="!isPlaying"
-                  v-view-transition-name="`play-button-${collectionId || 'default'}-${mediaItem.id || 'default'}`"
+                 
                 >
                   <svg viewBox="0 0 24 24" width="32" height="32" stroke="currentColor" stroke-width="2" fill="none">
                     <polygon points="5 3 19 12 5 21 5 3"></polygon>
@@ -80,7 +80,7 @@
           <template v-else-if="isImage">
             <div 
               class="image-wrapper image-transition-target"
-              v-view-transition-name="`image-${collectionId || 'default'}-${mediaItem.id || 'default'}`"
+             
             >
               <img 
                 :src="mediaItem && mediaItem.thumbnail ? mediaItem.thumbnail : ''" 
@@ -96,7 +96,7 @@
                 <div class="audio-header">
                   <div 
                     class="audio-thumbnail-wrapper audio-transition-target"
-                    v-view-transition-name="`image-${collectionId || 'default'}-${mediaItem.id || 'default'}`"
+                   
                   >
                     <img 
                       :src="mediaItem && mediaItem.thumbnail ? mediaItem.thumbnail : ''" 
@@ -427,8 +427,31 @@ export default {
   components: {
     VideoPlayerWithComments
   },
+
+  props: {
+    collectionId: {
+      type: String,
+      default: null
+    },
+    mediaItemId: {
+      type: String,
+      default: null
+    },
+    mediaItem: {
+      type: Object,
+      default: null
+    },
+    collection: {
+      type: Object,
+      default: null
+    },
+    isEmbedded: {
+      type: Boolean,
+      default: false
+    }
+  },
   
-  setup() {
+  setup(props) {
     const route = useRoute();
     const router = useRouter();
     const videoPlayer = ref(null);
@@ -447,8 +470,8 @@ export default {
     const showTimestamp = ref(false);
     
     // Computed values
-    const collectionId = computed(() => route.params.id || 'nab-demo');
-    const mediaItemId = computed(() => route.params.itemId || '1');
+    const collectionId = computed(() => props.collectionId || route.params.id || 'nab-demo');
+    const mediaItemId = computed(() => props.mediaItemId || route.params.itemId || '1');
     
     const isVideo = computed(() => {
       if (!mediaItem.value) return false;
@@ -620,22 +643,33 @@ export default {
       console.log('CollectionItemDetail mounted');
       console.log('Route params:', route.params);
       
-      // Load collection data
-      collection.value = getCollection(collectionId.value) || {
-        id: 'not-found',
-        title: 'Collection Not Found'
-      };
+      // Use direct props if available, otherwise load from mockData
+      if (props.collection) {
+        collection.value = props.collection;
+      } else {
+        collection.value = getCollection(collectionId.value) || {
+          id: 'not-found',
+          title: 'Collection Not Found'
+        };
+      }
       console.log('Loaded collection:', collection.value);
       
-      // Load media item
-      mediaItem.value = getMediaItem(collectionId.value, mediaItemId.value) || {
-        id: 'not-found',
-        title: 'Item Not Found'
-      };
+      if (props.mediaItem) {
+        mediaItem.value = props.mediaItem;
+      } else {
+        mediaItem.value = getMediaItem(collectionId.value, mediaItemId.value) || {
+          id: 'not-found',
+          title: 'Item Not Found'
+        };
+      }
       console.log('Loaded media item:', mediaItem.value);
       
-      // Load comments
-      comments.value = getComments(collectionId.value, mediaItemId.value) || [];
+      // Load comments (only for mockData items for now)
+      if (!props.mediaItem) {
+        comments.value = getComments(collectionId.value, mediaItemId.value) || [];
+      } else {
+        comments.value = []; // Filesystem items don't have comments yet
+      }
       console.log('Loaded comments:', comments.value);
       
       // Animate detail elements after transition completes
@@ -677,6 +711,19 @@ export default {
         newComment.value = '';
       }
     );
+
+    // Watch for changes in props
+    watch(() => props.mediaItem, (newMediaItem) => {
+      if (newMediaItem) {
+        mediaItem.value = newMediaItem;
+      }
+    });
+
+    watch(() => props.collection, (newCollection) => {
+      if (newCollection) {
+        collection.value = newCollection;
+      }
+    });
     
     return {
       collection,
@@ -710,7 +757,8 @@ export default {
       formatTime,
       formatRelativeTime,
       getInitials,
-      addComment
+      addComment,
+      isEmbedded: props.isEmbedded
     };
   }
 };

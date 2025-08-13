@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File System Access API Test</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        
+        .test-section {
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        .test-section h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        
+        button {
+            background: #3c5a9b;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        
+        button:hover {
+            background: #2c4a8b;
+        }
+        
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .file-list {
+            max-height: 300px;
+            overflow-y: auto;
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .file-item:last-child {
+            border-bottom: none;
+        }
+        
+        .file-name {
+            font-weight: 500;
+            flex: 1;
+        }
+        
+        .file-size {
+            color: #6c757d;
+            font-size: 0.9em;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>File System Access API Test</h1>
+    <p>This page tests the File System Access API implementation for the Rooms Vue application.</p>
+    
+    <div class="test-section">
+        <h3>Browser Compatibility</h3>
+        <div id="compatibility-status"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>Directory Selection</h3>
+        <button id="select-directory" onclick="selectDirectory()">Select Directory</button>
+        <div id="directory-status"></div>
+        <div id="directory-contents" class="file-list" style="display: none;"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>Room Creation Test</h3>
+        <button id="create-room" onclick="createTestRoom()" disabled>Create Room from Selected Directory</button>
+        <div id="room-status"></div>
+        <div id="room-details"></div>
+    </div>
+
+    <script type="module">
+        import { 
+            isFileSystemAccessSupported, 
+            isSecureContext,
+            pickDirectory,
+            scanDirectory,
+            calculateDirectoryStats,
+            formatFileSize
+        } from './src/utils/fileSystemAccess.js';
+        
+        import { processMediaFiles } from './src/utils/mediaProcessor.js';
+        import { roomService } from './src/services/roomService.js';
+
+        let selectedDirectoryHandle = null;
+        let scannedFiles = [];
+
+        // Check browser compatibility
+        function checkCompatibility() {
+            const statusEl = document.getElementById('compatibility-status');
+            
+            const isSupported = isFileSystemAccessSupported();
+            const isSecure = isSecureContext();
+            
+            if (isSupported && isSecure) {
+                statusEl.innerHTML = '<div class="status success">✓ File System Access API is supported and page is secure</div>';
+            } else if (!isSupported) {
+                statusEl.innerHTML = '<div class="status error">✗ File System Access API is not supported in this browser. Please use Chrome 86+, Edge 86+, or another compatible browser.</div>';
+            } else if (!isSecure) {
+                statusEl.innerHTML = '<div class="status error">✗ Page must be served over HTTPS or localhost for File System Access API</div>';
+            }
+            
+            return isSupported && isSecure;
+        }
+
+        // Select directory function
+        window.selectDirectory = async function() {
+            const statusEl = document.getElementById('directory-status');
+            const contentsEl = document.getElementById('directory-contents');
+            const createRoomBtn = document.getElementById('create-room');
+            
+            try {
+                statusEl.innerHTML = '<div class="status info">Opening directory picker...</div>';
+                
+                selectedDirectoryHandle = await pickDirectory();
+                
+                if (!selectedDirectoryHandle) {
+                    statusEl.innerHTML = '<div class="status info">Directory selection was canceled</div>';
+                    return;
+                }
+                
+                statusEl.innerHTML = `<div class="status info">Scanning directory: ${selectedDirectoryHandle.name}...</div>`;
+                
+                scannedFiles = await scanDirectory(selectedDirectoryHandle, (progress) => {
+                    if (progress.type === 'file_found') {
+                        statusEl.innerHTML = `<div class="status info">Found ${progress.totalFound} supported files...</div>`;
+                    }
+                });
+                
+                if (scannedFiles.length === 0) {
+                    statusEl.innerHTML = '<div class="status error">No supported media files found in the selected directory</div>';
+                    contentsEl.style.display = 'none';
+                    createRoomBtn.disabled = true;
+                    return;
+                }
+                
+                const stats = calculateDirectoryStats(scannedFiles);
+                statusEl.innerHTML = `<div class="status success">Found ${stats.totalFiles} files (${stats.formattedTotalSize})</div>`;
+                
+                // Display file list
+                contentsEl.innerHTML = scannedFiles.map(file => `
+                    <div class="file-item">
+                        <div class="file-name">${file.name}</div>
+                        <div class="file-size">${file.formattedSize}</div>
+                    </div>
+                `).join('');
+                contentsEl.style.display = 'block';
+                
+                createRoomBtn.disabled = false;
+                
+            } catch (error) {
+                statusEl.innerHTML = `<div class="status error">Error: ${error.message}</div>`;
+                console.error('Directory selection error:', error);
+                contentsEl.style.display = 'none';
+                createRoomBtn.disabled = true;
+            }
+        };
+
+        // Create room function
+        window.createTestRoom = async function() {
+            const statusEl = document.getElementById('room-status');
+            const detailsEl = document.getElementById('room-details');
+            
+            if (!selectedDirectoryHandle || !scannedFiles.length) {
+                statusEl.innerHTML = '<div class="status error">Please select a directory first</div>';
+                return;
+            }
+            
+            try {
+                statusEl.innerHTML = '<div class="status info">Creating room and processing thumbnails...</div>';
+                
+                const room = await roomService.createRoomFromDirectory((progress) => {
+                    switch (progress.type) {
+                        case 'thumbnail_progress':
+                            if (progress.progress) {
+                                statusEl.innerHTML = `<div class="status info">Processing thumbnails: ${progress.progress}%</div>`;
+                            }
+                            break;
+                        case 'room_created':
+                            statusEl.innerHTML = `<div class="status success">${progress.message}</div>`;
+                            break;
+                        case 'error':
+                            statusEl.innerHTML = `<div class="status error">Error: ${progress.message}</div>`;
+                            break;
+                    }
+                });
+                
+                if (room) {
+                    detailsEl.innerHTML = `
+                        <h4>Room Created Successfully</h4>
+                        <p><strong>Name:</strong> ${room.title}</p>
+                        <p><strong>Files:</strong> ${room.totalFiles}</p>
+                        <p><strong>Size:</strong> ${room.totalSize}</p>
+                        <p><strong>Has Videos:</strong> ${room.hasVideo ? 'Yes' : 'No'}</p>
+                        <p><strong>Has Images:</strong> ${room.hasImages ? 'Yes' : 'No'}</p>
+                        <p><strong>Has Audio:</strong> ${room.hasAudio ? 'Yes' : 'No'}</p>
+                        <p><strong>Room ID:</strong> ${room.id}</p>
+                    `;
+                } else {
+                    statusEl.innerHTML = '<div class="status error">Failed to create room</div>';
+                }
+                
+            } catch (error) {
+                statusEl.innerHTML = `<div class="status error">Error creating room: ${error.message}</div>`;
+                console.error('Room creation error:', error);
+            }
+        };
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            const isCompatible = checkCompatibility();
+            const selectBtn = document.getElementById('select-directory');
+            
+            if (!isCompatible) {
+                selectBtn.disabled = true;
+            }
+        });
+    </script>
+</body>
+</html>

@@ -31,8 +31,8 @@
 
     <template v-else>
       <!-- Header section with back button and title -->
-      <div class="header-container" v-view-transition-name="'header-background'">
-        <div class="item-header-container" v-if="mediaItem && mediaItem.id" v-view-transition-name="`item-header-${roomId || 'default'}-${mediaItem.id || 'default'}`">
+      <div class="header-container">
+        <div class="item-header-container" v-if="mediaItem && mediaItem.id">
           <div class="item-header-content">
             <div class="back-nav">
               <router-link :to="`/room/${roomId || ''}`" class="back-button">
@@ -42,13 +42,13 @@
                 Back
               </router-link>
             </div>
-            <h1 class="item-title" v-view-transition-name="`item-title-${roomId || 'default'}-${mediaItem.id || 'default'}`">
+            <h1 class="item-title">
               {{ mediaItem.title }}
             </h1>
-            <p class="item-type" v-view-transition-name="`item-type-${roomId || 'default'}-${mediaItem.id || 'default'}`">
+            <p class="item-type">
               {{ mediaItem.filetype || mediaItem.mimetype }}
             </p>
-            <div class="item-actions" v-view-transition-name="'detail-header-actions'">
+            <div class="item-actions">
               <button class="action-button download-button">
                 <svg viewBox="0 0 24 24" width="1em" height="1em" stroke="currentColor" stroke-width="2" fill="none">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -76,14 +76,14 @@
       <div class="content-container detail-element" :class="{ 'animated': pageLoaded }">
         <!-- Image content -->
         <div v-if="isImage(mediaItem)" class="image-container">
-          <div class="image-wrapper" v-view-transition-name="`image-${roomId || 'default'}-${mediaItem.id || 'default'}`">
+          <div class="image-wrapper">
             <img :src="mediaItem.url || mediaItem.thumbnail" :alt="mediaItem.title" class="full-image" />
           </div>
         </div>
 
         <!-- Video content -->
         <div v-else-if="isVideo(mediaItem)" class="video-container">
-          <div class="video-wrapper" v-view-transition-name="`video-image-${roomId || 'default'}-${mediaItem.id || 'default'}`">
+          <div class="video-wrapper">
             <video
               ref="videoPlayer"
               :src="mediaItem.url"
@@ -101,7 +101,7 @@
               <img :src="mediaItem.thumbnail" :alt="mediaItem.title" class="thumbnail-image" />
               <div 
                 class="play-button"
-                v-view-transition-name="`play-button-${roomId || 'default'}-${mediaItem.id || 'default'}`"
+               
               >
                 <svg viewBox="0 0 24 24" width="48" height="48" stroke="currentColor" stroke-width="2" fill="none">
                   <polygon points="5 3 19 12 5 21 5 3"></polygon>
@@ -113,7 +113,7 @@
 
         <!-- Audio content -->
         <div v-else-if="isAudio(mediaItem)" class="audio-container">
-          <div class="audio-thumbnail-wrapper" v-view-transition-name="`image-${roomId || 'default'}-${mediaItem.id || 'default'}`">
+          <div class="audio-thumbnail-wrapper">
             <img :src="mediaItem.thumbnail" :alt="mediaItem.title" class="audio-thumbnail" />
             <div class="audio-icon">
               <svg viewBox="0 0 24 24" width="40" height="40" stroke="currentColor" stroke-width="2" fill="none">

@@ -27,54 +27,105 @@
             >
               <font-awesome-icon :icon="['fas', showInactiveRooms ? 'door-open' : 'door-closed']" :style="{ color: showInactiveRooms ? '#3c5a9b' : '#626262' }" />
             </button>
-            <button class="add-btn">
-              <font-awesome-icon :icon="['fas', 'plus']" />
+            <button 
+              class="add-btn" 
+              @click="createNewRoom"
+              :disabled="isCreatingRoom"
+              :title="isFileSystemAccessSupported ? 'Create room from folder' : 'File System Access API not supported in this browser'"
+            >
+              <font-awesome-icon v-if="!isCreatingRoom" :icon="['fas', 'plus']" />
+              <font-awesome-icon v-else :icon="['fas', 'spinner']" spin />
             </button>
           </div>
         </div>
         <div class="sidebar-content">
-          <!-- Room items -->
-          <div 
-            v-if="showInactiveRooms || isActiveRoom('nab-2025-demo')"
-            class="room-item" 
-            :class="{ active: selectedRoom === 'nab-2025-demo' }"
-            @click.stop="selectRoom('nab-2025-demo')"
-          >
-            <div class="room-icon">
-              <font-awesome-icon :icon="['fas', 'door-open']" style="color: #3c5a9b;" />
-            </div>
-            <div class="room-info">
-              <div class="room-name">NAB 2025 Demo</div>
-            </div>
-            <div class="room-options">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="1"></circle>
-                <circle cx="19" cy="12" r="1"></circle>
-                <circle cx="5" cy="12" r="1"></circle>
-              </svg>
-            </div>
+          <!-- Room items with inline folder trees -->
+          <div>
+            <template v-for="room in visibleRooms" :key="room.id">
+              <!-- Room item -->
+              <div 
+                class="room-item" 
+                :class="{ active: selectedRoom === room.id }"
+                @click.stop="selectRoom(room.id)"
+              >
+                <div class="room-icon">
+                  <font-awesome-icon 
+                    v-if="room.type === 'filesystem' && room.status === 'loading'"
+                    :icon="['fas', 'spinner']"
+                    spin
+                    :style="{ color: '#3c5a9b' }"
+                  />
+                  <font-awesome-icon 
+                    v-else-if="room.type === 'filesystem' && room.status === 'processing'"
+                    :icon="['fas', 'sync-alt']"
+                    spin
+                    :style="{ color: '#3c5a9b' }"
+                  />
+                  <font-awesome-icon 
+                    v-else-if="room.type === 'filesystem' && room.status === 'error'"
+                    :icon="['fas', 'exclamation-triangle']"
+                    :style="{ color: '#dc2626' }"
+                  />
+                  <font-awesome-icon 
+                    v-else
+                    :icon="['fas', room.type === 'filesystem' ? 'folder' : (room.isActive ? 'door-open' : 'door-closed')]" 
+                    :style="{ color: room.isActive ? '#3c5a9b' : '#626262' }" 
+                  />
+                </div>
+                <div class="room-info">
+                  <div class="room-name">{{ room.name }}</div>
+                  <div v-if="room.type === 'filesystem'" class="room-status">
+                    <span v-if="room.status === 'loading' || room.status === 'processing'">
+                      {{ room.loadingMessage || 'Processing...' }}
+                    </span>
+                    <span v-else-if="room.status === 'error'" class="status-error">
+                      {{ room.loadingMessage || 'Error loading' }}
+                    </span>
+                    <span v-else>
+                      {{ room.itemCount }} files • {{ room.size }}
+                    </span>
+                  </div>
+                  <div v-else class="room-path">{{ room.itemCount }} files</div>
+                </div>
+                <div class="room-options">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="1"></circle>
+                    <circle cx="19" cy="12" r="1"></circle>
+                    <circle cx="5" cy="12" r="1"></circle>
+                  </svg>
+                </div>
+              </div>
+              
+              <!-- Inline folder tree for selected filesystem room -->
+              <Transition name="folder-tree-slide">
+                <div 
+                  v-if="selectedRoom === room.id && room.type === 'filesystem' && room.status === 'ready'"
+                  class="inline-folder-tree"
+                >
+                  <div v-if="folderTree.length === 0" class="tree-empty-state">
+                    <span class="text-gray-500">No folders found</span>
+                  </div>
+                  <div v-else class="tree-content">
+                    <TreeNode 
+                      v-for="node in folderTree" 
+                      :key="node.path || node.name"
+                      :node="node"
+                      :level="0"
+                      :show-files="false"
+                      @select-item="selectTreeItem"
+                      @toggle-folder="toggleFolder"
+                    />
+                  </div>
+                </div>
+              </Transition>
+            </template>
           </div>
-          
-          <!-- Other room item -->
-          <div 
-            v-if="showInactiveRooms || isActiveRoom('demo-room')"
-            class="room-item" 
-            :class="{ active: selectedRoom === 'demo-room' }"
-            @click.stop="selectRoom('demo-room')"
-          >
-            <div class="room-icon">
-              <font-awesome-icon :icon="['fas', 'door-closed']" style="color: #626262;" />
-            </div>
-            <div class="room-info">
-              <div class="room-name">Demo Room</div>
-            </div>
-            <div class="room-options">•••</div>
-          </div>
+
         </div>
       </div>
       
       <!-- Right Content Viewport -->
-      <div class="content-viewport" @click.stop="deselectRoom">
+      <div class="content-viewport" @click="handleBackgroundClick">
         <!-- No room selected - show all rooms -->
         <div v-if="selectedRoom === null" class="room-detail">
           <div class="room-header">
@@ -108,34 +159,33 @@
           <div class="rooms-container">
             <!-- Grid view -->
             <div v-if="viewMode === 'grid'" class="rooms-grid">
-              <div v-if="showInactiveRooms || isActiveRoom('nab-2025-demo')" class="room-card" @click.stop="selectRoom('nab-2025-demo')">
+              <div 
+                v-for="room in visibleRooms" 
+                :key="room.id"
+                class="room-card" 
+                @click.stop="selectRoom(room.id)"
+                :style="room.thumbnail ? { backgroundImage: `url(${room.thumbnail})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}"
+              >
                 <div class="room-card-header">
                   <div class="room-icon">
-                    <font-awesome-icon :icon="['fas', 'door-open']" />
+                    <font-awesome-icon 
+                      :icon="['fas', room.type === 'filesystem' ? 'folder' : (room.isActive ? 'door-open' : 'door-closed')]" 
+                      :style="{ color: room.isActive ? '#3c5a9b' : '#626262' }" 
+                    />
                   </div>
                   <div class="room-options">•••</div>
                 </div>
-                <div class="room-card-content">
-                  <h3 class="room-card-title">NAB 2025 Demo</h3>
-                  <p class="room-card-stats">6 items with video preview • 2.3 GB</p>
+                <div class="room-card-content" :class="{ 'has-thumbnail': room.thumbnail }">
+                  <h3 class="room-card-title">{{ room.name }}</h3>
+                  <p class="room-card-stats">
+                    {{ room.itemCount }} {{ room.itemCount === 1 ? 'item' : 'items' }}
+                    <span v-if="room.hasVideo"> with video preview</span>
+                    • {{ room.size }}
+                  </p>
                   <div class="room-card-status">
-                    <span class="status-badge active">Active</span>
-                  </div>
-                </div>
-              </div>
-              
-              <div v-if="showInactiveRooms || isActiveRoom('demo-room')" class="room-card" @click.stop="selectRoom('demo-room')">
-                <div class="room-card-header">
-                  <div class="room-icon">
-                    <font-awesome-icon :icon="['fas', 'door-closed']" style="color: #626262;" />
-                  </div>
-                  <div class="room-options">•••</div>
-                </div>
-                <div class="room-card-content">
-                  <h3 class="room-card-title">Demo Room</h3>
-                  <p class="room-card-stats">3 items • 1.5 GB</p>
-                  <div class="room-card-status">
-                    <span class="status-badge inactive">Inactive</span>
+                    <span class="status-badge" :class="{ 'active': room.isActive, 'inactive': !room.isActive }">
+                      {{ room.type === 'filesystem' ? 'Local Folder' : (room.isActive ? 'Active' : 'Inactive') }}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -143,39 +193,59 @@
             
             <!-- List view -->
             <div v-else class="rooms-list">
-              <div v-if="showInactiveRooms || isActiveRoom('nab-2025-demo')" class="room-list-item" @click.stop="selectRoom('nab-2025-demo')">
+              <div 
+                v-for="room in visibleRooms" 
+                :key="room.id"
+                class="room-list-item" 
+                @click.stop="selectRoom(room.id)"
+              >
                 <div class="room-list-icon">
-                  <font-awesome-icon :icon="['fas', 'door-open']" />
+                  <font-awesome-icon 
+                    :icon="['fas', room.type === 'filesystem' ? 'folder' : (room.isActive ? 'door-open' : 'door-closed')]" 
+                    :style="{ color: room.isActive ? '#3c5a9b' : '#626262' }" 
+                  />
                 </div>
                 <div class="room-list-info">
-                  <h3 class="room-title">NAB 2025 Demo</h3>
-                  <p class="room-stats">6 items with video preview • 2.3 GB</p>
+                  <h3 class="room-title">{{ room.name }}</h3>
+                  <p class="room-stats">
+                    {{ room.itemCount }} {{ room.itemCount === 1 ? 'item' : 'items' }}
+                    <span v-if="room.hasVideo"> with video preview</span>
+                    • {{ room.size }}
+                  </p>
                 </div>
-                <span class="status-badge">Active</span>
-              </div>
-              
-              <div v-if="showInactiveRooms || isActiveRoom('demo-room')" class="room-list-item" @click.stop="selectRoom('demo-room')">
-                <div class="room-list-icon">
-                  <font-awesome-icon :icon="['fas', 'door-closed']" style="color: #626262;" />
-                </div>
-                <div class="room-list-info">
-                  <h3 class="room-title">Demo Room</h3>
-                  <p class="room-stats">3 items • 1.5 GB</p>
-                </div>
-                <span class="status-badge status-inactive">Inactive</span>
+                <span class="status-badge" :class="{ 'status-inactive': !room.isActive }">
+                  {{ room.type === 'filesystem' ? 'Local Folder' : (room.isActive ? 'Active' : 'Inactive') }}
+                </span>
               </div>
             </div>
           </div>
         </div>
         
-        <!-- NAB 2025 Demo is selected -->
-        <div v-else-if="selectedRoom === 'nab-2025-demo'" class="room-detail">
-          <CollectionView class="embedded-view" />
-        </div>
-        
-        <!-- Demo Room content -->
-        <div v-else-if="selectedRoom === 'demo-room'" class="room-detail">
-          <RoomView class="embedded-view" />
+        <!-- Room is selected -->
+        <div v-else class="room-detail">
+          <!-- Static demo rooms -->
+          <EmbeddedCollectionView 
+            v-if="selectedRoom === 'nab-2025-demo'" 
+            :collectionId="'nab-demo'"
+            class="embedded-view" 
+            @click.stop
+          />
+          <RoomView v-else-if="selectedRoom === 'demo-room'" class="embedded-view" @click.stop />
+          
+          <!-- Filesystem rooms -->
+          <FileSystemCollectionAdapter 
+            v-else-if="getRoomById(selectedRoom)?.type === 'filesystem'" 
+            :roomId="selectedRoom" 
+            class="embedded-view"
+            @click.stop
+          />
+          
+          <!-- Fallback for unknown room types -->
+          <div v-else class="room-not-found">
+            <h2>Room not found</h2>
+            <p>The selected room could not be loaded.</p>
+            <button @click="deselectRoom" class="btn-primary">Back to Rooms</button>
+          </div>
         </div>
       </div>
     </div>
@@ -183,60 +253,385 @@
 </template>
 
 <script>
+import { ref, computed, onMounted } from 'vue';
 import CollectionView from './CollectionView.vue';
 import RoomView from './RoomView.vue';
+import FileSystemRoomView from './FileSystemRoomView.vue';
+import EmbeddedCollectionView from '../components/EmbeddedCollectionView.vue';
+import EmbeddedFileSystemRoomView from '../components/EmbeddedFileSystemRoomView.vue';
+import FileSystemCollectionAdapter from '../components/FileSystemCollectionAdapter.vue';
+import TreeNode from '../components/TreeNode.vue';
+import { roomService } from '../services/roomService.js';
+import { isFileSystemAccessSupported } from '../utils/fileSystemAccess.js';
 
 export default {
   name: 'SpacesView',
   components: {
     CollectionView,
-    RoomView
+    RoomView,
+    FileSystemRoomView,
+    EmbeddedCollectionView,
+    EmbeddedFileSystemRoomView,
+    FileSystemCollectionAdapter,
+    TreeNode
   },
-  data() {
-    return {
-      selectedRoom: null,
-      viewMode: 'grid',
-      showInactiveRooms: true,
-      rooms: [
-        { id: 'nab-2025-demo', name: 'NAB 2025 Demo', isActive: true, itemCount: 6, hasVideo: true, size: '2.3 GB' },
-        { id: 'demo-room', name: 'Demo Room', isActive: false, itemCount: 3, hasVideo: false, size: '1.5 GB' }
-      ]
-    }
-  },
-  computed: {
-    visibleRooms() {
-      return this.rooms.filter(room => this.showInactiveRooms || room.isActive);
-    },
-    visibleRoomCount() {
-      return this.visibleRooms.length;
-    },
-    totalRoomCount() {
-      return this.rooms.length;
-    }
-  },
-  methods: {
-    selectRoom(roomId) {
-      this.selectedRoom = roomId;
-    },
-    deselectRoom() {
-      this.selectedRoom = null;
-    },
-    handleBackgroundClick(event) {
+  setup() {
+    const selectedRoom = ref(null);
+    const viewMode = ref('grid');
+    const showInactiveRooms = ref(true);
+    const isCreatingRoom = ref(false);
+    const createRoomError = ref(null);
+    const createRoomProgress = ref(null);
+    const showFileTree = ref(true);
+    const selectedFile = ref(null);
+    
+    // Static rooms (existing demo data)
+    const staticRooms = ref([
+      { id: 'nab-2025-demo', name: 'NAB 2025 Demo', isActive: true, itemCount: 6, hasVideo: true, size: '2.3 GB', type: 'static' },
+      { id: 'demo-room', name: 'Demo Room', isActive: false, itemCount: 3, hasVideo: false, size: '1.5 GB', type: 'static' }
+    ]);
+
+    // Combine static rooms with file system rooms
+    const rooms = computed(() => {
+      const fileSystemRooms = roomService.getAllRooms().map(room => ({
+        id: room.id,
+        name: room.title,
+        isActive: room.status === 'ready' || room.status === 'active',
+        itemCount: room.totalFiles,
+        hasVideo: room.hasVideo,
+        size: room.totalSize,
+        type: 'filesystem',
+        thumbnail: room.thumbnail,
+        dateCreated: room.dateCreated,
+        status: room.status,
+        loadingMessage: room.loadingMessage
+      }));
+      
+      return [...staticRooms.value, ...fileSystemRooms];
+    });
+
+    const isFileSystemAccessApiSupported = computed(() => {
+      return isFileSystemAccessSupported();
+    });
+
+    const visibleRooms = computed(() => {
+      return rooms.value.filter(room => showInactiveRooms.value || room.isActive);
+    });
+
+    const visibleRoomCount = computed(() => {
+      return visibleRooms.value.length;
+    });
+
+    const totalRoomCount = computed(() => {
+      return rooms.value.length;
+    });
+
+    // File tree computed properties
+    const selectedRoomData = computed(() => {
+      if (!selectedRoom.value) return null;
+      return rooms.value.find(room => room.id === selectedRoom.value);
+    });
+
+    const selectedRoomName = computed(() => {
+      return selectedRoomData.value?.name || '';
+    });
+
+    const selectedRoomFiles = computed(() => {
+      const roomData = selectedRoomData.value;
+      if (!roomData || roomData.type !== 'filesystem') {
+        return [];
+      }
+      
+      const room = roomService.getRoom(selectedRoom.value);
+      return room?.files || [];
+    });
+
+    const folderTree = computed(() => {
+      const files = selectedRoomFiles.value;
+      if (!files || !files.length) return [];
+      
+      try {
+        // Add a limit to prevent runaway computation
+        if (files.length > 10000) {
+          console.warn('Too many files for folder tree, limiting to first 10000');
+          return buildFolderTree(files.slice(0, 10000));
+        }
+        return buildFolderTree(files);
+      } catch (error) {
+        console.error('Error building folder tree:', error);
+        return [];
+      }
+    });
+
+    const buildFolderTree = (files) => {
+      if (!files || files.length === 0) {
+        return [];
+      }
+      
+      const tree = new Map();
+      
+      files.forEach(file => {
+        // Handle both fullPath and path+name patterns
+        let fullPath = '';
+        if (file.fullPath) {
+          fullPath = file.fullPath;
+        } else if (file.path && file.name) {
+          // If path is empty, just use name
+          fullPath = file.path ? `${file.path}/${file.name}` : file.name;
+        } else if (file.name) {
+          fullPath = file.name;
+        } else {
+          console.warn('File missing path information:', file);
+          return;
+        }
+        
+        const pathParts = fullPath.split('/').filter(p => p); // Remove empty parts
+        let currentLevel = tree;
+        let currentPath = '';
+        
+        // Build folder structure
+        for (let i = 0; i < pathParts.length; i++) {
+          const part = pathParts[i];
+          currentPath = currentPath ? `${currentPath}/${part}` : part;
+          const isLastPart = i === pathParts.length - 1;
+          
+          if (!currentLevel.has(part)) {
+            currentLevel.set(part, {
+              name: part,
+              path: currentPath,
+              isFolder: !isLastPart,
+              children: isLastPart ? null : new Map(),
+              // File properties (only for files)
+              ...(isLastPart ? {
+                id: file.id,
+                type: file.type || file.mimetype,
+                size: file.size,
+                blobUrl: file.blobUrl,
+                handle: file.handle
+              } : {})
+            });
+          } else if (!isLastPart) {
+            // Ensure intermediate folders exist
+            const existing = currentLevel.get(part);
+            if (!existing.children) {
+              existing.children = new Map();
+              existing.isFolder = true;
+            }
+          }
+          
+          if (!isLastPart) {
+            currentLevel = currentLevel.get(part).children;
+          }
+        }
+      });
+      
+      return convertMapToArray(tree);
+    };
+    
+    const convertMapToArray = (map) => {
+      return Array.from(map.values())
+        .sort((a, b) => {
+          // Folders first, then files
+          if (a.isFolder && !b.isFolder) return -1;
+          if (!a.isFolder && b.isFolder) return 1;
+          return a.name.localeCompare(b.name);
+        })
+        .map(node => ({
+          ...node,
+          children: node.children ? convertMapToArray(node.children) : null
+        }));
+    };
+    
+    const selectTreeItem = (item) => {
+      if (!item.isFolder) {
+        selectedFile.value = item;
+        console.log('Selected file from tree:', item);
+        // TODO: Navigate to file detail view or emit event
+      }
+    };
+    
+    const toggleFolder = (folderData) => {
+      console.log('Toggled folder:', folderData.path, 'expanded:', folderData.expanded);
+    };
+
+    const createNewRoom = async () => {
+      if (!isFileSystemAccessApiSupported.value) {
+        alert('File System Access API is not supported in this browser. Please use Chrome 86+, Edge 86+, or another compatible browser.');
+        return;
+      }
+
+      // Prevent double-clicks or multiple simultaneous requests
+      if (isCreatingRoom.value) {
+        console.log('Room creation already in progress');
+        return;
+      }
+
+      isCreatingRoom.value = true;
+      createRoomError.value = null;
+      createRoomProgress.value = null;
+
+      try {
+        const room = await roomService.createRoomFromDirectory((progress) => {
+          createRoomProgress.value = progress;
+          console.log('Progress update:', progress.type, progress.message);
+          
+          // You could show a toast notification or progress indicator here
+          switch (progress.type) {
+            case 'directory_picker':
+              console.log(progress.message);
+              break;
+            case 'scanning_progress':
+              console.log(`Scanning: ${progress.totalFound} files found`);
+              break;
+            case 'thumbnail_progress':
+              if (progress.progress) {
+                console.log(`Processing thumbnails: ${progress.progress}%`);
+              }
+              break;
+            case 'room_created':
+              console.log(progress.message);
+              break;
+            case 'error':
+              console.error(progress.message);
+              break;
+          }
+        });
+
+        if (room) {
+          // Automatically select the new room
+          selectedRoom.value = room.id;
+          console.log('New room created:', room.title, 'ID:', room.id);
+        } else {
+          console.log('Room creation returned null (user canceled or error)');
+        }
+
+      } catch (error) {
+        createRoomError.value = error.message;
+        console.error('Failed to create room:', error);
+        alert(`Failed to create room: ${error.message}`);
+      } finally {
+        isCreatingRoom.value = false;
+        createRoomProgress.value = null;
+      }
+    };
+
+    const selectRoom = (roomId) => {
+      selectedRoom.value = roomId;
+      
+      // Update access time for filesystem rooms
+      const room = roomService.getRoom(roomId);
+      if (room) {
+        roomService.updateRoomAccess(roomId);
+      }
+    };
+
+    const deselectRoom = () => {
+      selectedRoom.value = null;
+    };
+
+    const handleBackgroundClick = (event) => {
       // Only deselect if clicking directly on the content area
       if (event.target.classList.contains('content-viewport')) {
-        this.deselectRoom();
+        deselectRoom();
       }
-    },
-    toggleInactiveRooms() {
-      this.showInactiveRooms = !this.showInactiveRooms;
-    },
-    isActiveRoom(roomId) {
-      const room = this.rooms.find(r => r.id === roomId);
+    };
+
+    const toggleInactiveRooms = () => {
+      showInactiveRooms.value = !showInactiveRooms.value;
+    };
+
+    // File tree functions
+    const toggleFileTree = () => {
+      showFileTree.value = !showFileTree.value;
+    };
+
+    const selectFile = (file) => {
+      selectedFile.value = file;
+      // TODO: Could emit an event or navigate to file detail view
+      console.log('Selected file:', file);
+    };
+
+    const getFileIcon = (file) => {
+      const type = file.type || file.mimetype || '';
+      
+      if (type.startsWith('image/')) return 'image';
+      if (type.startsWith('video/')) return 'video';
+      if (type.startsWith('audio/')) return 'music';
+      if (type.includes('pdf')) return 'file-pdf';
+      
+      return 'file';
+    };
+
+    const getFileIconColor = (file) => {
+      const type = file.type || file.mimetype || '';
+      
+      if (type.startsWith('image/')) return '#10b981'; // green
+      if (type.startsWith('video/')) return '#3b82f6'; // blue
+      if (type.startsWith('audio/')) return '#f59e0b'; // yellow
+      if (type.includes('pdf')) return '#ef4444'; // red
+      
+      return '#6b7280'; // gray
+    };
+
+    const formatFileSize = (bytes) => {
+      if (!bytes) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    };
+
+    const isActiveRoom = (roomId) => {
+      const room = rooms.value.find(r => r.id === roomId);
       return room ? room.isActive : false;
-    },
-    getRoomById(roomId) {
-      return this.rooms.find(r => r.id === roomId) || null;
-    }
+    };
+
+    const getRoomById = (roomId) => {
+      return rooms.value.find(r => r.id === roomId) || null;
+    };
+
+    // Validate filesystem room access on mount
+    onMounted(async () => {
+      const fileSystemRooms = roomService.getAllRooms();
+      for (const room of fileSystemRooms) {
+        await roomService.validateRoomAccess(room.id);
+      }
+    });
+
+    return {
+      selectedRoom,
+      viewMode,
+      showInactiveRooms,
+      rooms,
+      visibleRooms,
+      visibleRoomCount,
+      totalRoomCount,
+      isCreatingRoom,
+      createRoomError,
+      createRoomProgress,
+      isFileSystemAccessSupported: isFileSystemAccessApiSupported,
+      createNewRoom,
+      selectRoom,
+      deselectRoom,
+      handleBackgroundClick,
+      toggleInactiveRooms,
+      isActiveRoom,
+      getRoomById,
+      // File tree
+      showFileTree,
+      selectedFile,
+      selectedRoomData,
+      selectedRoomName,
+      selectedRoomFiles,
+      folderTree,
+      toggleFileTree,
+      selectFile,
+      selectTreeItem,
+      toggleFolder,
+      getFileIcon,
+      getFileIconColor,
+      formatFileSize
+    };
   }
 }
 </script>
@@ -301,8 +696,8 @@ export default {
   display: flex;
   flex: 1;
   padding: 24px;
-  overflow: hidden;
   gap: 24px;
+  min-height: 0;
 }
 
 /* Left sidebar styles */
@@ -405,8 +800,186 @@ export default {
   color: #2c3e50;
 }
 
+.room-path {
+  font-size: 11px;
+  color: #6c757d;
+  margin-top: 2px;
+}
+
 .room-options {
   color: #6c757d;
+}
+
+.room-status {
+  font-size: 12px;
+  color: #6c757d;
+  margin-top: 2px;
+}
+
+.status-error {
+  color: #dc2626;
+}
+
+/* Inline folder tree styles */
+.inline-folder-tree {
+  background-color: #f8fafc;
+  border-left: 3px solid #3b82f6;
+  margin-left: 1rem;
+  margin-right: 0.5rem;
+  margin-top: 0.25rem;
+  margin-bottom: 0.5rem;
+  border-radius: 0 0.375rem 0.375rem 0;
+  overflow: hidden;
+}
+
+.tree-empty-state {
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.tree-content {
+  padding: 0.5rem 0;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+/* Slide animation for folder tree */
+.folder-tree-slide-enter-active,
+.folder-tree-slide-leave-active {
+  transition: all 0.3s ease;
+  transform-origin: top;
+}
+
+.folder-tree-slide-enter-from {
+  opacity: 0;
+  transform: translateY(-10px) scaleY(0.8);
+  max-height: 0;
+}
+
+.folder-tree-slide-leave-to {
+  opacity: 0;
+  transform: translateY(-10px) scaleY(0.8);
+  max-height: 0;
+}
+
+.folder-tree-slide-enter-to,
+.folder-tree-slide-leave-from {
+  opacity: 1;
+  transform: translateY(0) scaleY(1);
+  max-height: 300px;
+}
+
+.simple-file-item:hover {
+  background-color: #f3f4f6;
+}
+
+.simple-file-item span {
+  flex: 1;
+  font-size: 0.875rem;
+  color: #374151;
+}
+
+.simple-file-item .file-size {
+  flex: 0;
+  font-size: 0.75rem;
+  color: #9ca3af;
+}
+
+.empty-state {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: #6b7280;
+  font-size: 0.875rem;
+}
+
+.empty-state p {
+  margin: 0.25rem 0;
+}
+
+.file-tree-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.file-tree-header h4 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.collapse-button {
+  background: none;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+  transition: all 0.2s;
+}
+
+.collapse-button:hover {
+  background-color: #f3f4f6;
+  color: #111827;
+}
+
+.file-tree {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.file-tree-item {
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.file-tree-item:hover {
+  background-color: #f9fafb;
+}
+
+.file-tree-item.active {
+  background-color: #e7f0fd;
+}
+
+.file-tree-item-content {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  gap: 0.75rem;
+}
+
+.file-tree-item .file-icon {
+  width: 1rem;
+  height: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.file-tree-item .file-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-tree-item .file-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #111827;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-tree-item .file-size {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-top: 0.125rem;
 }
 
 /* Content viewport styles */
@@ -415,9 +988,9 @@ export default {
   background-color: #ffffff;
   border-radius: 8px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 /* Room hero section */
@@ -619,6 +1192,7 @@ export default {
   cursor: pointer;
   overflow: hidden;
   transition: transform .2s, box-shadow .2s;
+  position: relative;
 }
 
 .room-card:hover {
@@ -653,6 +1227,21 @@ export default {
 
 .room-card-content {
   padding: 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.room-card-content.has-thumbnail {
+  background: linear-gradient(to bottom, rgba(0,0,0,0.1), rgba(0,0,0,0.8));
+  color: white;
+}
+
+.room-card-content.has-thumbnail .room-card-title {
+  color: white;
+}
+
+.room-card-content.has-thumbnail .room-card-stats {
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .room-card-title {

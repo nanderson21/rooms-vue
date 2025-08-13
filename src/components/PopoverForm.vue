@@ -10,10 +10,10 @@
         ref="triggerButton"
         class="flex h-9 items-center rounded-lg border bg-white dark:bg-[#121212] px-3 text-sm font-medium outline-none"
         :style="{ borderRadius: '8px' }"
-        v-view-transition-name="formTransitionName"
+       
         @click="open"
       >
-        <span v-view-transition-name="titleTransitionName">{{ title }}</span>
+        <span>{{ title }}</span>
       </button>
     </transition>
 
@@ -26,14 +26,14 @@
       <div
         v-if="isOpen"
         ref="formContainer"
-        v-view-transition-name="formTransitionName"
+       
         class="absolute p-1 overflow-hidden bg-muted shadow-[0_0_0_1px_rgba(0,0,0,0.08),0px_1px_2px_rgba(0,0,0,0.04)] outline-none"
         :style="{ borderRadius: '10px', width, height }"
         v-click-outside="handleClickOutside"
       >
         <span
           v-if="!showSuccess"
-          v-view-transition-name="titleTransitionName"
+         
           class="absolute left-4 top-[17px] text-sm text-muted-foreground"
           :class="{ 'text-transparent': showSuccess }"
         >
