@@ -262,6 +262,7 @@
             :roomId="selectedRoom" 
             class="embedded-view"
             @click.stop
+            @folder-settings="handleFolderSettings"
           />
           
           <!-- Fallback for unknown room types -->
@@ -273,6 +274,15 @@
         </div>
       </div>
     </div>
+    
+    <!-- Room Settings Modal -->
+    <RoomSettings 
+      v-if="settingsModal.visible"
+      :roomId="settingsModal.roomId"
+      :selectedFolderPath="settingsModal.selectedFolderPath"
+      @close="closeSettingsModal"
+      @settings-saved="onSettingsSaved"
+    />
   </div>
 </template>
 
@@ -285,6 +295,7 @@ import EmbeddedCollectionView from '../components/EmbeddedCollectionView.vue';
 import EmbeddedFileSystemRoomView from '../components/EmbeddedFileSystemRoomView.vue';
 import FileSystemCollectionAdapter from '../components/FileSystemCollectionAdapter.vue';
 import TreeNode from '../components/TreeNode.vue';
+import RoomSettings from '../components/RoomSettings.vue';
 import { roomService } from '../services/roomService.js';
 import { isFileSystemAccessSupported } from '../utils/fileSystemAccess.js';
 
@@ -297,7 +308,8 @@ export default {
     EmbeddedCollectionView,
     EmbeddedFileSystemRoomView,
     FileSystemCollectionAdapter,
-    TreeNode
+    TreeNode,
+    RoomSettings
   },
   setup() {
     const selectedRoom = ref(null);
@@ -315,6 +327,13 @@ export default {
       roomId: null,
       x: 0,
       y: 0
+    });
+    
+    // Settings modal state
+    const settingsModal = ref({
+      visible: false,
+      roomId: null,
+      selectedFolderPath: null
     });
     
     // Static rooms (existing demo data)
@@ -607,8 +626,27 @@ export default {
     const openRoomSettings = (room) => {
       contextMenu.value.visible = false;
       contextMenu.value.roomId = null;
-      console.log('Opening settings for room:', room.name);
-      // TODO: Open RoomSettings component
+      
+      settingsModal.value.visible = true;
+      settingsModal.value.roomId = room.id;
+      settingsModal.value.selectedFolderPath = null;
+    };
+    
+    const closeSettingsModal = () => {
+      settingsModal.value.visible = false;
+      settingsModal.value.roomId = null;
+      settingsModal.value.selectedFolderPath = null;
+    };
+    
+    const onSettingsSaved = (data) => {
+      console.log('Settings saved:', data);
+      // TODO: Update room data with new folder roles
+    };
+    
+    const handleFolderSettings = (folder) => {
+      settingsModal.value.visible = true;
+      settingsModal.value.roomId = selectedRoom.value;
+      settingsModal.value.selectedFolderPath = folder.path;
     };
 
     const refreshRoom = (room) => {
@@ -731,7 +769,12 @@ export default {
       toggleRoomMenu,
       openRoomSettings,
       refreshRoom,
-      removeRoom
+      removeRoom,
+      // Settings modal
+      settingsModal,
+      closeSettingsModal,
+      onSettingsSaved,
+      handleFolderSettings
     };
   }
 }
