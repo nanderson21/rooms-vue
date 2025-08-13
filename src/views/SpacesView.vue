@@ -87,12 +87,36 @@
                   </div>
                   <div v-else class="room-path">{{ room.itemCount }} files</div>
                 </div>
-                <div class="room-options">
+                <div class="room-options" @click.stop="toggleRoomMenu(room.id, $event)" ref="roomOptionsButton">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="12" r="1"></circle>
                     <circle cx="19" cy="12" r="1"></circle>
                     <circle cx="5" cy="12" r="1"></circle>
                   </svg>
+                </div>
+                
+                <!-- Room Context Menu -->
+                <div 
+                  v-if="contextMenu.visible && contextMenu.roomId === room.id" 
+                  class="room-context-menu"
+                  :style="contextMenuStyle"
+                  @click.stop
+                >
+                  <ul class="context-menu-list">
+                    <li class="context-menu-item" @click="openRoomSettings(room)">
+                      <font-awesome-icon :icon="['fas', 'cog']" />
+                      <span>Settings</span>
+                    </li>
+                    <li class="context-menu-item" @click="refreshRoom(room)">
+                      <font-awesome-icon :icon="['fas', 'sync-alt']" />
+                      <span>Refresh</span>
+                    </li>
+                    <li class="context-menu-divider"></li>
+                    <li class="context-menu-item danger" @click="removeRoom(room)">
+                      <font-awesome-icon :icon="['fas', 'trash']" />
+                      <span>Remove Room</span>
+                    </li>
+                  </ul>
                 </div>
               </div>
               
@@ -285,6 +309,14 @@ export default {
     const showFileTree = ref(true);
     const selectedFile = ref(null);
     
+    // Context menu state
+    const contextMenu = ref({
+      visible: false,
+      roomId: null,
+      x: 0,
+      y: 0
+    });
+    
     // Static rooms (existing demo data)
     const staticRooms = ref([
       { id: 'nab-2025-demo', name: 'NAB 2025 Demo', isActive: true, itemCount: 6, hasVideo: true, size: '2.3 GB', type: 'static' },
@@ -362,6 +394,14 @@ export default {
         return [];
       }
     });
+
+    // Context menu style positioning
+    const contextMenuStyle = computed(() => ({
+      position: 'fixed',
+      top: `${contextMenu.value.y}px`,
+      left: `${contextMenu.value.x}px`,
+      zIndex: 1000
+    }));
 
     const buildFolderTree = (files) => {
       if (!files || files.length === 0) {
@@ -534,10 +574,64 @@ export default {
       if (event.target.classList.contains('content-viewport')) {
         deselectRoom();
       }
+      // Close context menu when clicking elsewhere
+      if (contextMenu.value.visible) {
+        contextMenu.value.visible = false;
+        contextMenu.value.roomId = null;
+      }
     };
 
     const toggleInactiveRooms = () => {
       showInactiveRooms.value = !showInactiveRooms.value;
+    };
+
+    // Context menu methods
+    const toggleRoomMenu = (roomId, event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      
+      if (contextMenu.value.visible && contextMenu.value.roomId === roomId) {
+        // Close if same room menu is already open
+        contextMenu.value.visible = false;
+        contextMenu.value.roomId = null;
+      } else {
+        // Open menu at click position
+        const rect = event.target.getBoundingClientRect();
+        contextMenu.value.x = rect.right + 8; // Offset from the button
+        contextMenu.value.y = rect.top;
+        contextMenu.value.roomId = roomId;
+        contextMenu.value.visible = true;
+      }
+    };
+
+    const openRoomSettings = (room) => {
+      contextMenu.value.visible = false;
+      contextMenu.value.roomId = null;
+      console.log('Opening settings for room:', room.name);
+      // TODO: Open RoomSettings component
+    };
+
+    const refreshRoom = (room) => {
+      contextMenu.value.visible = false;
+      contextMenu.value.roomId = null;
+      console.log('Refreshing room:', room.name);
+      // TODO: Implement room refresh logic
+    };
+
+    const removeRoom = (room) => {
+      contextMenu.value.visible = false;
+      contextMenu.value.roomId = null;
+      
+      if (confirm(`Are you sure you want to remove "${room.name}"?`)) {
+        console.log('Removing room:', room.name);
+        if (room.type === 'filesystem') {
+          roomService.removeRoom(room.id);
+        }
+        // If this was the selected room, deselect it
+        if (selectedRoom.value === room.id) {
+          selectedRoom.value = null;
+        }
+      }
     };
 
     // File tree functions
@@ -630,7 +724,14 @@ export default {
       toggleFolder,
       getFileIcon,
       getFileIconColor,
-      formatFileSize
+      formatFileSize,
+      // Context menu
+      contextMenu,
+      contextMenuStyle,
+      toggleRoomMenu,
+      openRoomSettings,
+      refreshRoom,
+      removeRoom
     };
   }
 }
@@ -1399,6 +1500,54 @@ export default {
   color: #6b7280;
   font-size: 14px;
   line-height: 1.4;
+}
+
+/* Room Context Menu */
+.room-context-menu {
+  position: fixed;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border: 1px solid #e5e7eb;
+  padding: 4px;
+  min-width: 160px;
+  z-index: 1000;
+}
+
+.context-menu-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #374151;
+  transition: background-color 0.2s ease;
+}
+
+.context-menu-item:hover {
+  background-color: #f3f4f6;
+}
+
+.context-menu-item.danger {
+  color: #dc2626;
+}
+
+.context-menu-item.danger:hover {
+  background-color: #fef2f2;
+}
+
+.context-menu-divider {
+  height: 1px;
+  background-color: #e5e7eb;
+  margin: 4px 0;
 }
 
 /* Embedded view styles */

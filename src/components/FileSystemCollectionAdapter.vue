@@ -2,7 +2,10 @@
   <EmbeddedCollectionView
     :collection="adaptedCollection"
     :items="adaptedItems"
+    :folders="adaptedFolders"
     @item-selected="handleItemSelected"
+    @folder-selected="handleFolderSelected"
+    @folder-settings="handleFolderSettings"
     @back-to-collection="handleBackToCollection"
   />
 </template>
@@ -26,7 +29,7 @@ export default {
     }
   },
 
-  emits: ['item-selected', 'back-to-collection'],
+  emits: ['item-selected', 'folder-selected', 'folder-settings', 'back-to-collection'],
 
   setup(props, { emit }) {
     // Get reactive room data
@@ -54,6 +57,91 @@ export default {
       };
     });
 
+    // Extract folders from the room's folder tree
+    const extractFoldersFromTree = (room) => {
+      if (!room?.files) return [];
+      
+      const folderMap = new Map();
+      
+      // Build folder structure from file paths
+      room.files.forEach(file => {
+        let fullPath = '';
+        if (file.fullPath) {
+          fullPath = file.fullPath;
+        } else if (file.path && file.name) {
+          fullPath = file.path ? `${file.path}/${file.name}` : file.name;
+        } else if (file.name) {
+          fullPath = file.name;
+        } else {
+          return;
+        }
+        
+        const pathParts = fullPath.split('/').filter(p => p);
+        if (pathParts.length <= 1) return; // Skip files in root
+        
+        // Process each folder level
+        for (let i = 0; i < pathParts.length - 1; i++) {
+          const folderPath = pathParts.slice(0, i + 1).join('/');
+          const folderName = pathParts[i];
+          
+          if (!folderMap.has(folderPath)) {
+            folderMap.set(folderPath, {
+              id: `folder-${folderPath}`,
+              name: folderName,
+              path: folderPath,
+              fileCount: 0,
+              subfolderCount: 0,
+              size: 0,
+              files: []
+            });
+          }
+          
+          // Add file to folder
+          const folder = folderMap.get(folderPath);
+          folder.files.push(file);
+          folder.fileCount++;
+          folder.size += file.size || 0;
+        }
+      });
+      
+      // Calculate subfolder counts
+      folderMap.forEach((folder, folderPath) => {
+        folderMap.forEach((otherFolder, otherPath) => {
+          if (otherPath !== folderPath && otherPath.startsWith(folderPath + '/')) {
+            const relativePath = otherPath.substring(folderPath.length + 1);
+            if (!relativePath.includes('/')) {
+              folder.subfolderCount++;
+            }
+          }
+        });
+      });
+      
+      return Array.from(folderMap.values());
+    };
+
+    // Adapt folders for display
+    const adaptedFolders = computed(() => {
+      if (!room.value) return [];
+      
+      const folders = extractFoldersFromTree(room.value);
+      
+      return folders.map(folder => ({
+        id: folder.id,
+        name: folder.name,
+        path: folder.path,
+        fileCount: folder.fileCount,
+        subfolderCount: folder.subfolderCount,
+        size: folder.size,
+        files: folder.files,
+        // TODO: Add classification data from MovieLabs service
+        classification: {
+          id: 'generic_folder',
+          label: 'Folder',
+          confidence: 0.5
+        }
+      }));
+    });
+
     // Adapt files to look like collection items
     const adaptedItems = computed(() => {
       if (!room.value || !room.value.files) {
@@ -78,13 +166,23 @@ export default {
         // Add filesystem-specific properties
         path: file.path,
         isLocal: true,
-        fileHandle: file.handle // Keep handle for video playback
+        fileHandle: file.handle // Keep handle for video playbook
       }));
     });
 
     // Handle item selection
     const handleItemSelected = (item) => {
       emit('item-selected', item);
+    };
+
+    // Handle folder selection
+    const handleFolderSelected = (folder) => {
+      emit('folder-selected', folder);
+    };
+
+    // Handle folder settings
+    const handleFolderSettings = (folder) => {
+      emit('folder-settings', folder);
     };
 
     // Handle back to collection
@@ -133,7 +231,10 @@ export default {
     return {
       adaptedCollection,
       adaptedItems,
+      adaptedFolders,
       handleItemSelected,
+      handleFolderSelected,
+      handleFolderSettings,
       handleBackToCollection
     };
   }

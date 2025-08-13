@@ -98,6 +98,16 @@
         <div class="content-container" :class="{'view-transitioning': isTransitioning}">
           <!-- Grid View -->
           <div v-if="isGridView" class="grid-view" :class="{ 'transitioning': isTransitioning }">
+            <!-- Folder Cards -->
+            <FolderCard
+              v-for="folder in folders"
+              :key="`folder-${folder.id}`"
+              :folder="folder"
+              @folder-selected="selectFolder"
+              @folder-settings="openFolderSettings"
+            />
+            
+            <!-- File Cards -->
             <div
               v-for="(item, index) in filteredItems" 
               :key="item.id"
@@ -269,13 +279,15 @@ import { ref, computed, onMounted, watch, defineProps, defineEmits } from 'vue';
 import { getCollection, getCollectionItems } from '@/utils/mockData';
 import ScrubbableImage from '@/components/scrubbable/ScrubbableImage.vue';
 import CollectionItemDetail from '@/views/CollectionItemDetail.vue';
+import FolderCard from '@/components/FolderCard.vue';
 
 export default {
   name: 'EmbeddedCollectionView',
   
   components: {
     ScrubbableImage,
-    CollectionItemDetail
+    CollectionItemDetail,
+    FolderCard
   },
 
   props: {
@@ -290,10 +302,14 @@ export default {
     items: {
       type: Array,
       default: null
+    },
+    folders: {
+      type: Array,
+      default: () => []
     }
   },
 
-  emits: ['item-selected', 'back-to-collection'],
+  emits: ['item-selected', 'folder-selected', 'folder-settings', 'back-to-collection'],
   
   setup(props, { emit }) {
     const viewType = ref('grid');
@@ -333,6 +349,16 @@ export default {
       selectedMediaItem.value = item;
       setSelectedItem(item.id);
       emit('item-selected', item);
+    };
+
+    // Handle folder selection
+    const selectFolder = (folder) => {
+      emit('folder-selected', folder);
+    };
+
+    // Handle folder settings
+    const openFolderSettings = (folder) => {
+      emit('folder-settings', folder);
     };
 
     // Go back to collection view
@@ -423,6 +449,8 @@ export default {
       isTransitioning,
       setSelectedItem,
       selectMediaItem,
+      selectFolder,
+      openFolderSettings,
       backToCollection
     };
   }
