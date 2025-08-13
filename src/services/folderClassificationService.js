@@ -54,6 +54,27 @@ export const FOLDER_CLASSES = {
     ]
   },
 
+  RED_CLIP_STANDALONE: {
+    id: 'red_clip_standalone',
+    label: 'RED Clip (Standalone)',
+    pattern: /\.RDC$/i,
+    description: 'Standalone RED clip folder (RDC) not within magazine structure',
+    assetType: 'clip_group',
+    expectedFiles: ['.R3D', '.RMD', '.RSX'],
+    utilities: ['identifier', 'composition', 'measurements', 'file_details'],
+    fieldDefinitions: [
+      { name: 'clip_name', type: 'text', label: 'Clip Name', required: true },
+      { name: 'timecode_start', type: 'text', label: 'Start Timecode', 
+        config: { pattern: '\\d{2}:\\d{2}:\\d{2}:\\d{2}' }
+      },
+      { name: 'duration_frames', type: 'number', label: 'Duration (frames)', required: true },
+      { name: 'iso', type: 'number', label: 'ISO', required: true },
+      { name: 'white_balance', type: 'number', label: 'White Balance (K)' },
+      { name: 'lens', type: 'text', label: 'Lens' },
+      { name: 'notes', type: 'textarea', label: 'Shot Notes' }
+    ]
+  },
+
   ARRI_CAMERA_ROLL: {
     id: 'arri_camera_roll',
     label: 'ARRI Camera Roll',

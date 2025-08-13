@@ -14,6 +14,7 @@
 import { computed, watch } from 'vue';
 import EmbeddedCollectionView from './EmbeddedCollectionView.vue';
 import { roomService } from '../services/roomService.js';
+import { folderRolePersistence } from '../services/folderRolePersistence.js';
 
 export default {
   name: 'FileSystemCollectionAdapter',
@@ -125,22 +126,58 @@ export default {
       
       const folders = extractFoldersFromTree(room.value);
       
-      return folders.map(folder => ({
-        id: folder.id,
-        name: folder.name,
-        path: folder.path,
-        fileCount: folder.fileCount,
-        subfolderCount: folder.subfolderCount,
-        size: folder.size,
-        files: folder.files,
-        // TODO: Add classification data from MovieLabs service
-        classification: {
-          id: 'generic_folder',
-          label: 'Folder',
-          confidence: 0.5
-        }
-      }));
+      // Load saved folder roles
+      const savedRoles = folderRolePersistence.loadFolderRoles(props.roomId);
+      
+      return folders.map(folder => {
+        const savedRole = savedRoles?.[folder.path];
+        
+        return {
+          id: folder.id,
+          name: folder.name,
+          path: folder.path,
+          fileCount: folder.fileCount,
+          subfolderCount: folder.subfolderCount,
+          size: folder.size,
+          files: folder.files,
+          // Apply saved role if exists, otherwise use default classification
+          assignedRole: savedRole?.assignedRole || null,
+          metadata: savedRole?.metadata || {},
+          classification: savedRole?.assignedRole ? {
+            id: savedRole.assignedRole.childId || savedRole.assignedRole.parentId,
+            label: getRoleLabel(savedRole.assignedRole),
+            confidence: 1.0 // Manually assigned roles have 100% confidence
+          } : {
+            id: 'generic_folder',
+            label: 'Folder',
+            confidence: 0.5
+          }
+        };
+      });
     });
+    
+    // Helper function to get role label
+    const getRoleLabel = (assignedRole) => {
+      if (!assignedRole) return 'Folder';
+      
+      // This is a simplified lookup - in a full implementation you'd lookup from the role hierarchy
+      const roleLabels = {
+        'video_source': 'Video Source',
+        'red_camera_roll': 'RED Camera Roll',
+        'red_clip_standalone': 'RED Clip',
+        'arri_camera_roll': 'ARRI Camera Roll',
+        'vfx_shots': 'VFX Shots',
+        'vfx_elements': 'VFX Elements',
+        'editorial': 'Editorial',
+        'color_projects': 'Color',
+        'audio_projects': 'Audio',
+        'deliverables_master': 'Deliverables'
+      };
+      
+      return roleLabels[assignedRole.childId] || 
+             roleLabels[assignedRole.parentId] || 
+             'Assigned Role';
+    };
 
     // Adapt files to look like collection items
     const adaptedItems = computed(() => {

@@ -172,6 +172,7 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import DirectoryTreeNode from './DirectoryTreeNode.vue';
 import { roomService } from '../services/roomService.js';
+import { folderRolePersistence } from '../services/folderRolePersistence.js';
 
 export default {
   name: 'RoomSettings',
@@ -492,6 +493,16 @@ export default {
         // Get room data and build directory tree
         roomData.value = roomService.getRoom(props.roomId);
         directoryTree.value = buildDirectoryTree(roomData.value?.files || []);
+        
+        // Load and apply existing folder roles
+        const savedRoles = folderRolePersistence.loadFolderRoles(props.roomId);
+        if (savedRoles) {
+          directoryTree.value = folderRolePersistence.applyFolderRolesToTree(
+            directoryTree.value, 
+            savedRoles
+          );
+          console.log('Applied saved folder roles to directory tree');
+        }
       } catch (error) {
         console.error('Error scanning directory:', error);
       } finally {
@@ -570,9 +581,15 @@ export default {
       if (folder.assignedRole) {
         selectedParentRole.value = folder.assignedRole.parentId || '';
         selectedChildRole.value = folder.assignedRole.childId || '';
+        
+        // Load metadata if available
+        if (folder.metadata) {
+          folderMetadata.value = { ...folder.metadata };
+        }
       } else {
         selectedParentRole.value = '';
         selectedChildRole.value = '';
+        folderMetadata.value = {};
       }
     };
     
@@ -616,7 +633,15 @@ export default {
         assignedAt: new Date().toISOString()
       };
       
+      // Save metadata
+      selectedFolder.value.metadata = {
+        ...selectedFolder.value.metadata,
+        ...folderMetadata.value,
+        lastModified: new Date().toISOString()
+      };
+      
       hasChanges.value = true;
+      console.log('Applied role assignment:', selectedFolder.value.assignedRole);
     };
     
     const clearRoleAssignment = () => {
@@ -629,13 +654,34 @@ export default {
     };
     
     const saveSettings = () => {
-      console.log('Saving room settings...');
-      // TODO: Implement actual save logic
-      emit('settings-saved', {
-        roomId: props.roomId,
-        folderRoles: directoryTree.value
-      });
-      emit('close');
+      try {
+        console.log('Saving room settings...');
+        
+        // Extract folder roles from directory tree
+        const folderRoles = folderRolePersistence.extractFolderRolesFromTree(directoryTree.value);
+        
+        // Save to localStorage
+        const saved = folderRolePersistence.saveFolderRoles(props.roomId, folderRoles);
+        
+        if (saved) {
+          console.log('Successfully saved folder roles');
+          hasChanges.value = false;
+          
+          emit('settings-saved', {
+            roomId: props.roomId,
+            folderRoles: folderRoles,
+            directoryTree: directoryTree.value
+          });
+          
+          emit('close');
+        } else {
+          console.error('Failed to save folder roles');
+          // Could show an error message to user here
+        }
+      } catch (error) {
+        console.error('Error saving settings:', error);
+        // Could show an error message to user here
+      }
     };
     
     // Lifecycle
