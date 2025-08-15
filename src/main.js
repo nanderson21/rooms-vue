@@ -35,7 +35,8 @@ import {
   faFile,
   faArrowLeft,
   faChevronDown,
-  faChevronRight
+  faChevronRight,
+  faCog
 } from '@fortawesome/free-solid-svg-icons'
 
 // Add icons to the library
@@ -59,7 +60,8 @@ library.add(
   faFile,
   faArrowLeft,
   faChevronDown,
-  faChevronRight
+  faChevronRight,
+  faCog
 )
 
 // Define a proper polyfill for browsers that don't support View Transitions API

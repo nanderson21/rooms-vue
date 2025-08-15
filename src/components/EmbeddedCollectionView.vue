@@ -62,6 +62,27 @@
         </div>
       </div>
 
+      <!-- Breadcrumb Navigation -->
+      <div v-if="breadcrumbs.length > 0" class="breadcrumb-nav">
+        <nav class="breadcrumb-container">
+          <button @click="$emit('navigate-to-root')" class="breadcrumb-item root">
+            <font-awesome-icon :icon="['fas', 'home']" />
+            <span>Root</span>
+          </button>
+          <span class="breadcrumb-separator">/</span>
+          <template v-for="(crumb, index) in breadcrumbs" :key="crumb.path">
+            <button 
+              @click="$emit('navigate-to-folder', crumb.path)" 
+              class="breadcrumb-item"
+              :class="{ 'current': index === breadcrumbs.length - 1 }"
+            >
+              {{ crumb.name }}
+            </button>
+            <span v-if="index < breadcrumbs.length - 1" class="breadcrumb-separator">/</span>
+          </template>
+        </nav>
+      </div>
+
       <!-- Main Content Area -->
       <div class="content-area">
         <!-- View toggles -->
@@ -114,10 +135,6 @@
               class="grid-item"
               :class="{ 'selected': selectedItemId === item.id }"
               @click="selectMediaItem(item)">
-              <div class="item-header">
-                <h3 class="item-title">{{ item.title }}</h3>
-                <p class="item-type">{{ item.filetype || item.mimetype }}</p>
-              </div>
               <div class="item-media">
                 <!-- Image items -->
                 <div v-if="isImage(item)" class="item-thumbnail-container">
@@ -205,6 +222,15 @@
                     </svg>
                   </div>
                 </div>
+              </div>
+              <div class="item-header">
+                <div class="header-content">
+                  <h3 class="item-title">{{ item.title }}</h3>
+                  <p class="item-metadata">{{ item.createdDate || formatDate(new Date()) }}</p>
+                </div>
+                <button class="more-button" :title="`More options for ${item.title}`">
+                  ⋯
+                </button>
               </div>
             </div>
           </div>
@@ -306,10 +332,18 @@ export default {
     folders: {
       type: Array,
       default: () => []
+    },
+    breadcrumbs: {
+      type: Array,
+      default: () => []
+    },
+    currentFolderPath: {
+      type: String,
+      default: null
     }
   },
 
-  emits: ['item-selected', 'folder-selected', 'folder-settings', 'back-to-collection'],
+  emits: ['item-selected', 'folder-selected', 'folder-settings', 'back-to-collection', 'navigate-to-root', 'navigate-to-folder'],
   
   setup(props, { emit }) {
     const viewType = ref('grid');
@@ -319,10 +353,10 @@ export default {
     const selectedMediaItem = ref(null);
     const isTransitioning = ref(false);
     
-    // Filter to only show items with video previews
+    // Filter to show all supported media types
     const filteredItems = computed(() => {
       return items.value.filter(item => 
-        item.previewVideo || isImage(item) || isAudio(item) || isDocument(item)
+        isImage(item) || isVideo(item) || isAudio(item) || isDocument(item)
       );
     });
     
@@ -536,10 +570,20 @@ export default {
 .hero-content {
   position: relative;
   z-index: 10;
-  padding: 2.5rem 1rem;
-  max-width: 1200px;
-  margin: 0 auto;
+  padding: 32px 16px;
   width: 100%;
+}
+
+@media (min-width: 640px) {
+  .hero-content {
+    padding: 40px 20px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .hero-content {
+    padding: 48px 24px;
+  }
 }
 
 .hero-title {
@@ -601,19 +645,29 @@ export default {
 }
 
 .view-controls {
-  padding: 1.5rem 1rem;
+  padding: 16px;
   border-bottom: 1px solid #e5e7eb;
   background-color: white;
   transition: background-color 0.4s ease-in-out;
 }
 
+@media (min-width: 640px) {
+  .view-controls {
+    padding: 20px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .view-controls {
+    padding: 24px;
+  }
+}
+
 .view-toggles {
   display: flex;
   justify-content: flex-end;
-  gap: 0.5rem;
-  max-width: 1200px;
-  margin: 0 auto;
-  margin-bottom: 1.5rem;
+  gap: 8px;
+  width: 100%;
 }
 
 .view-toggle-btn {
@@ -636,50 +690,56 @@ export default {
 }
 
 .content-container {
-  max-width: 1200px;
-  margin: 0 auto;
+  width: 100%;
 }
 
 /* Grid view styles */
 .grid-view {
   display: grid;
-  grid-template-columns: repeat(1, minmax(0, 1fr));
-  gap: 1rem;
-  padding: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+  padding: 16px;
 }
 
 @media (min-width: 640px) {
   .grid-view {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (min-width: 768px) {
-  .grid-view {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+    padding: 20px;
   }
 }
 
 @media (min-width: 1024px) {
   .grid-view {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 24px;
+    padding: 24px;
+  }
+}
+
+@media (min-width: 1400px) {
+  .grid-view {
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   }
 }
 
 .grid-item {
   display: block;
   background-color: white;
-  border-radius: 0.75rem;
+  border-radius: 12px;
   overflow: hidden;
-  border: 1px solid #e5e7eb;
-  transition: all 0.3s;
+  border: 2px solid #dbeafe;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
   transform: translateY(0);
   cursor: pointer;
+  padding: 0;
 }
 
 .grid-item:hover {
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  transform: translateY(-0.25rem);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+  border-color: #93c5fd;
 }
 
 .grid-item.selected {
@@ -692,36 +752,70 @@ export default {
 
 .item-media {
   aspect-ratio: 16 / 9;
-  background-color: #f3f4f6;
+  background-color: white;
   position: relative;
   overflow: hidden;
+  border-radius: 10px 10px 0 0;
+  height: auto;
+  min-height: 180px;
+  padding: 12px;
 }
 
 .item-thumbnail-container {
   width: 100%;
   height: 100%;
-  transition: transform 0.3s;
+  transition: transform 0.2s ease;
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: #f8fafc;
 }
 
 .grid-item:hover .item-thumbnail-container {
-  transform: scale(1.05);
+  transform: scale(1.02);
 }
 
 .thumbnail-wrapper {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background-color: #000;
+  background-color: #f8fafc;
   position: relative;
   z-index: 1;
-  view-transition-name: initial;
-  contain: paint;
+  border-radius: 8px;
 }
 
 .item-thumbnail {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition: transform 0.2s ease;
+}
+
+.grid-item:hover .item-thumbnail {
+  transform: scale(1.02);
+}
+
+.more-button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid #d1d5db;
+  background: #f9fafb;
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  flex-shrink: 0;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.more-button:hover {
+  color: #111827;
+  background-color: #e5e7eb;
+  border-color: #9ca3af;
 }
 
 .play-button-container {
@@ -733,25 +827,37 @@ export default {
 }
 
 .play-button {
-  width: 3rem;
-  height: 3rem;
-  background-color: rgba(0, 0, 0, 0.75);
-  border-radius: 9999px;
+  width: 48px;
+  height: 48px;
+  background-color: rgba(0, 0, 0, 0.8);
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.play-button:hover {
+  background-color: rgba(0, 0, 0, 0.9);
+  transform: scale(1.05);
 }
 
 .duration-badge {
   position: absolute;
-  bottom: 0.5rem;
-  right: 0.5rem;
-  background-color: rgba(0, 0, 0, 0.75);
+  bottom: 8px;
+  right: 8px;
+  background-color: rgba(0, 0, 0, 0.8);
   color: white;
-  font-size: 0.75rem;
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.25rem;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 6px;
+  border-radius: 4px;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  letter-spacing: 0.02em;
 }
 
 .audio-icon-container,
@@ -763,37 +869,51 @@ export default {
 
 .audio-icon,
 .document-icon {
-  padding: 1.5rem;
-  border-radius: 9999px;
-  background-color: rgba(59, 130, 246, 0.1);
+  padding: 20px;
+  border-radius: 50%;
+  background-color: rgba(59, 130, 246, 0.08);
   color: #3b82f6;
+  transition: all 0.2s ease;
+}
+
+.grid-item:hover .audio-icon,
+.grid-item:hover .document-icon {
+  background-color: rgba(59, 130, 246, 0.12);
+  transform: scale(1.02);
 }
 
 .item-header {
-  padding: 0.75rem;
-  background-color: #f9fafb;
-  border-bottom: 1px solid #e5e7eb;
+  padding: 12px 16px 16px 16px;
+  background-color: white;
+  border-top: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.header-content {
+  flex: 1;
+  min-width: 0;
 }
 
 .item-title {
-  font-size: 0.875rem;
-  font-weight: 500;
-  white-space: nowrap;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #1f2937;
+  margin: 0 0 4px 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: #111827;
-  transform-origin: left top;
-  transition: transform 0.3s ease, font-size 0.3s ease;
-  will-change: transform;
+  white-space: nowrap;
 }
 
-.item-type {
-  font-size: 0.75rem;
+.item-metadata {
+  font-size: 13px;
   color: #6b7280;
-  margin-top: 0.25rem;
-  transform-origin: left top;
-  transition: transform 0.3s ease, font-size 0.3s ease;
-  will-change: transform;
+  font-weight: 400;
+  margin: 0;
+  line-height: 1.2;
 }
 
 /* List view styles */
@@ -892,5 +1012,73 @@ tr:last-child td {
   .list-view {
     overflow-x: auto;
   }
+}
+
+/* Breadcrumb Navigation */
+.breadcrumb-nav {
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 12px 16px;
+}
+
+@media (min-width: 640px) {
+  .breadcrumb-nav {
+    padding: 12px 20px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .breadcrumb-nav {
+    padding: 12px 24px;
+  }
+}
+
+.breadcrumb-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.breadcrumb-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #64748b;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.breadcrumb-item:hover {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.breadcrumb-item.root {
+  color: #3b82f6;
+  font-weight: 500;
+}
+
+.breadcrumb-item.current {
+  color: #1e293b;
+  font-weight: 600;
+  cursor: default;
+}
+
+.breadcrumb-item.current:hover {
+  background: none;
+}
+
+.breadcrumb-separator {
+  color: #cbd5e1;
+  font-size: 14px;
+  margin: 0 4px;
 }
 </style>

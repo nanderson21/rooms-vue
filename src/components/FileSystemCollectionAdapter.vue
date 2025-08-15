@@ -3,15 +3,19 @@
     :collection="adaptedCollection"
     :items="adaptedItems"
     :folders="adaptedFolders"
+    :breadcrumbs="breadcrumbs"
+    :currentFolderPath="currentFolderPath"
     @item-selected="handleItemSelected"
     @folder-selected="handleFolderSelected"
     @folder-settings="handleFolderSettings"
     @back-to-collection="handleBackToCollection"
+    @navigate-to-root="navigateToRoot"
+    @navigate-to-folder="navigateToFolder"
   />
 </template>
 
 <script>
-import { computed, watch } from 'vue';
+import { computed, watch, ref } from 'vue';
 import EmbeddedCollectionView from './EmbeddedCollectionView.vue';
 import { roomService } from '../services/roomService.js';
 import { folderRolePersistence } from '../services/folderRolePersistence.js';
@@ -27,12 +31,20 @@ export default {
     roomId: {
       type: String,
       required: true
+    },
+    currentFolderPath: {
+      type: String,
+      default: null
     }
   },
 
   emits: ['item-selected', 'folder-selected', 'folder-settings', 'back-to-collection'],
 
   setup(props, { emit }) {
+    // Navigation state
+    const currentFolderPath = ref(null);
+    const breadcrumbs = ref([]);
+    
     // Get reactive room data
     const room = computed(() => roomService.getRoom(props.roomId));
 
@@ -124,12 +136,24 @@ export default {
     const adaptedFolders = computed(() => {
       if (!room.value) return [];
       
-      const folders = extractFoldersFromTree(room.value);
+      const allFolders = extractFoldersFromTree(room.value);
+      
+      // Filter folders based on currentFolderPath
+      const filteredFolders = allFolders.filter(folder => {
+        if (!currentFolderPath.value) {
+          // Show top-level folders (no slashes in path)
+          return !folder.path.includes('/');
+        } else {
+          // Show folders directly within the current path
+          const relativePath = folder.path.substring(currentFolderPath.value.length + 1);
+          return folder.path.startsWith(currentFolderPath.value + '/') && !relativePath.includes('/');
+        }
+      });
       
       // Load saved folder roles
       const savedRoles = folderRolePersistence.loadFolderRoles(props.roomId);
       
-      return folders.map(folder => {
+      return filteredFolders.map(folder => {
         const savedRole = savedRoles?.[folder.path];
         
         return {
@@ -185,7 +209,20 @@ export default {
         return [];
       }
 
-      return room.value.files.map(file => ({
+      const filteredFiles = room.value.files.filter(file => {
+        if (!file.fullPath) return false; // Skip files without a fullPath
+
+        if (!currentFolderPath.value) {
+          // Show top-level files
+          return !file.fullPath.includes('/');
+        } else {
+          // Show files directly within the current path
+          const relativePath = file.fullPath.substring(currentFolderPath.value.length + 1);
+          return file.fullPath.startsWith(currentFolderPath.value + '/') && !relativePath.includes('/');
+        }
+      });
+
+      return filteredFiles.map(file => ({
         id: file.id,
         title: file.name,
         description: file.description || `${file.type || 'File'} • ${formatFileSize(file.size)}`,
@@ -212,9 +249,37 @@ export default {
       emit('item-selected', item);
     };
 
-    // Handle folder selection
+    // Handle folder selection (navigate into folder)
     const handleFolderSelected = (folder) => {
+      currentFolderPath.value = folder.path;
+      updateBreadcrumbs();
       emit('folder-selected', folder);
+    };
+    
+    // Update breadcrumbs for navigation
+    const updateBreadcrumbs = () => {
+      if (!currentFolderPath.value) {
+        breadcrumbs.value = [];
+        return;
+      }
+      
+      const parts = currentFolderPath.value.split('/').filter(p => p);
+      breadcrumbs.value = parts.map((part, index) => ({
+        name: part,
+        path: parts.slice(0, index + 1).join('/')
+      }));
+    };
+    
+    // Navigate back up the folder hierarchy
+    const navigateToFolder = (folderPath) => {
+      currentFolderPath.value = folderPath;
+      updateBreadcrumbs();
+    };
+    
+    // Navigate to root
+    const navigateToRoot = () => {
+      currentFolderPath.value = null;
+      breadcrumbs.value = [];
     };
 
     // Handle folder settings
@@ -269,9 +334,13 @@ export default {
       adaptedCollection,
       adaptedItems,
       adaptedFolders,
+      breadcrumbs,
+      currentFolderPath,
       handleItemSelected,
       handleFolderSelected,
       handleFolderSettings,
+      navigateToFolder,
+      navigateToRoot,
       handleBackToCollection
     };
   }

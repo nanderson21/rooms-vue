@@ -1,0 +1,29 @@
+{
+  "name": "cs-xmp",
+  "version": "2.0.8",
+  "description": "creative.space wrapper for exiftool",
+  "main": "cs-xmp.js",
+  "type": "module",
+  "scripts": {
+    "test": "node cs-xmptest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/digitalglue-software/cs-xmp.git"
+  },
+  "keywords": [
+    "xmp",
+    "exiftool",
+    "metadata"
+  ],
+  "private": true,
+  "author": "jpm",
+  "license": "UNLICENSED",
+  "bugs": {
+    "url": "https://github.com/digitalglue-software/cs-xmp/issues"
+  },
+  "dependencies": {
+    "cs-escapepath": "git+ssh://git@github.com:digitalglue-software/cs-escapepath.git"
+  },
+  "homepage": "https://github.com/digitalglue-software/cs-xmp#readme"
+}

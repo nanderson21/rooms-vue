@@ -247,6 +247,37 @@
         
         <!-- Room is selected -->
         <div v-else class="room-detail">
+          <div class="room-header">
+            <div class="header-left">
+              <button v-if="currentFolderPath" @click="navigateUpFolder" class="back-button">
+                <font-awesome-icon :icon="['fas', 'arrow-left']" />
+                <span>Back</span>
+              </button>
+              <h1 class="room-title">{{ selectedRoomData?.name }}</h1>
+              <span v-if="currentFolderPath" class="room-path">{{ currentFolderPath }}</span>
+            </div>
+            
+            <!-- View controls moved inside room header -->
+            <div class="view-controls">
+              <div class="view-toggle">
+                <button 
+                  class="view-button" 
+                  :class="{ 'active': viewMode === 'grid' }" 
+                  @click="viewMode = 'grid'"
+                >
+                  <font-awesome-icon :icon="['fas', 'th']" />
+                </button>
+                <button 
+                  class="view-button" 
+                  :class="{ 'active': viewMode === 'list' }" 
+                  @click="viewMode = 'list'"
+                >
+                  <font-awesome-icon :icon="['fas', 'list']" />
+                </button>
+              </div>
+            </div>
+          </div>
+
           <!-- Static demo rooms -->
           <EmbeddedCollectionView 
             v-if="selectedRoom === 'nab-2025-demo'" 
@@ -260,8 +291,10 @@
           <FileSystemCollectionAdapter 
             v-else-if="getRoomById(selectedRoom)?.type === 'filesystem'" 
             :roomId="selectedRoom" 
+            :currentFolderPath="currentFolderPath" 
             class="embedded-view"
             @click.stop
+            @folder-selected="handleFolderSelected"
             @folder-settings="handleFolderSettings"
           />
           
@@ -275,13 +308,12 @@
       </div>
     </div>
     
-    <!-- Room Settings Modal -->
-    <RoomSettings 
+    <!-- Room Settings Wizard Modal -->
+    <RoomSettingsWizard 
       v-if="settingsModal.visible"
       :roomId="settingsModal.roomId"
-      :selectedFolderPath="settingsModal.selectedFolderPath"
       @close="closeSettingsModal"
-      @settings-saved="onSettingsSaved"
+      @template-applied="onTemplateApplied"
     />
   </div>
 </template>
@@ -295,7 +327,7 @@ import EmbeddedCollectionView from '../components/EmbeddedCollectionView.vue';
 import EmbeddedFileSystemRoomView from '../components/EmbeddedFileSystemRoomView.vue';
 import FileSystemCollectionAdapter from '../components/FileSystemCollectionAdapter.vue';
 import TreeNode from '../components/TreeNode.vue';
-import RoomSettings from '../components/RoomSettings.vue';
+import RoomSettingsWizard from '../components/RoomSettingsWizard.vue';
 import { roomService } from '../services/roomService.js';
 import { isFileSystemAccessSupported } from '../utils/fileSystemAccess.js';
 
@@ -309,7 +341,7 @@ export default {
     EmbeddedFileSystemRoomView,
     FileSystemCollectionAdapter,
     TreeNode,
-    RoomSettings
+    RoomSettingsWizard
   },
   setup() {
     const selectedRoom = ref(null);
@@ -320,6 +352,7 @@ export default {
     const createRoomProgress = ref(null);
     const showFileTree = ref(true);
     const selectedFile = ref(null);
+    const currentFolderPath = ref(null); // New state for current folder path
     
     // Context menu state
     const contextMenu = ref({
@@ -332,8 +365,7 @@ export default {
     // Settings modal state
     const settingsModal = ref({
       visible: false,
-      roomId: null,
-      selectedFolderPath: null
+      roomId: null
     });
     
     // Static rooms (existing demo data)
@@ -629,24 +661,43 @@ export default {
       
       settingsModal.value.visible = true;
       settingsModal.value.roomId = room.id;
-      settingsModal.value.selectedFolderPath = null;
     };
     
     const closeSettingsModal = () => {
       settingsModal.value.visible = false;
       settingsModal.value.roomId = null;
-      settingsModal.value.selectedFolderPath = null;
     };
     
-    const onSettingsSaved = (data) => {
-      console.log('Settings saved:', data);
-      // TODO: Update room data with new folder roles
+    const onTemplateApplied = (data) => {
+      console.log('Template applied:', data);
+      // TODO: Update room data with new workflow template
+      // Refresh the room to show updated folder classifications
+      const room = roomService.getRoom(data.roomId);
+      if (room) {
+        roomService.updateRoomAccess(data.roomId);
+      }
     };
     
     const handleFolderSettings = (folder) => {
       settingsModal.value.visible = true;
       settingsModal.value.roomId = selectedRoom.value;
-      settingsModal.value.selectedFolderPath = folder.path;
+      // Note: The new wizard will handle folder selection internally
+    };
+
+    const handleFolderSelected = (folder) => {
+      console.log('Folder selected in viewport:', folder);
+      currentFolderPath.value = folder.path; // Set the current folder path
+    };
+
+    const navigateUpFolder = () => {
+      if (currentFolderPath.value) {
+        const pathParts = currentFolderPath.value.split('/');
+        if (pathParts.length > 1) {
+          currentFolderPath.value = pathParts.slice(0, -1).join('/');
+        } else {
+          currentFolderPath.value = null; // Go to root of the room
+        }
+      }
     };
 
     const refreshRoom = (room) => {
@@ -773,8 +824,10 @@ export default {
       // Settings modal
       settingsModal,
       closeSettingsModal,
-      onSettingsSaved,
-      handleFolderSettings
+      onTemplateApplied,
+      handleFolderSettings,
+      handleFolderSelected,
+      navigateUpFolder
     };
   }
 }

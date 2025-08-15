@@ -92,7 +92,6 @@ export default {
     };
     
     const toggleExpansion = () => {
-      props.node.isExpanded = !props.node.isExpanded;
       emit('toggle-folder', props.node);
     };
     

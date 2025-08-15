@@ -1,18 +1,5 @@
 <template>
   <div class="folder-card" @click="selectFolder">
-    <div class="item-header">
-      <h3 class="item-title">{{ folder.name }}</h3>
-      <div class="folder-actions">
-        <button 
-          class="gear-button" 
-          @click.stop="openFolderSettings"
-          :title="`Settings for ${folder.name}`"
-        >
-          <font-awesome-icon :icon="['fas', 'cog']" />
-        </button>
-      </div>
-    </div>
-    
     <div class="item-media">
       <div class="folder-icon-container">
         <div class="folder-icon">
@@ -32,18 +19,20 @@
       </div>
     </div>
     
-    <div class="folder-meta">
-      <p class="folder-type">
-        {{ getFolderTypeDisplay() }}
-      </p>
-      <p v-if="folder.size" class="folder-size">
-        {{ formatFileSize(folder.size) }}
-      </p>
-      <div v-if="folder.classification" class="folder-classification">
-        <span class="classification-badge" :class="getClassificationClass()">
-          {{ folder.classification.label || 'Generic Folder' }}
-        </span>
+    <div class="item-header">
+      <div class="header-content">
+        <h3 class="item-title">{{ folder.name }}</h3>
+        <p class="item-metadata">
+          {{ getFolderTypeDisplay() }}
+        </p>
       </div>
+      <button 
+        class="gear-button" 
+        @click.stop="openFolderSettings"
+        :title="`Settings for ${folder.name}`"
+      >
+        <font-awesome-icon :icon="['fas', 'cog']" />
+      </button>
     </div>
   </div>
 </template>
@@ -124,87 +113,100 @@ export default {
 
 <style scoped>
 .folder-card {
-  background-color: #fff;
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
+  background-color: white;
+  border-radius: 12px;
+  border: 2px solid #dbeafe;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   cursor: pointer;
   transition: all 0.2s ease;
   overflow: hidden;
   position: relative;
+  transform: translateY(0);
 }
 
 .folder-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   transform: translateY(-2px);
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  border-color: #d1d5db;
+  border-color: #93c5fd;
 }
 
 .item-header {
-  padding: 16px 16px 12px 16px;
+  padding: 12px 16px 16px 16px;
+  background-color: white;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  gap: 12px;
+}
+
+.header-content {
+  flex: 1;
+  min-width: 0;
 }
 
 .item-title {
   font-size: 16px;
   font-weight: 600;
-  color: #111827;
-  margin: 0;
-  flex: 1;
-  line-height: 1.4;
-}
-
-.folder-actions {
-  display: flex;
-  align-items: center;
-  margin-left: 12px;
+  line-height: 1.2;
+  color: #1f2937;
+  margin: 0 0 4px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .gear-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 4px;
-  background: none;
+  width: 24px;
+  height: 24px;
   border: none;
+  background: none;
   color: #6b7280;
   cursor: pointer;
   transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  flex-shrink: 0;
 }
 
 .gear-button:hover {
-  background-color: #f3f4f6;
   color: #374151;
+  background-color: #f3f4f6;
 }
 
 .item-media {
-  padding: 0 16px 16px 16px;
+  aspect-ratio: 16 / 9;
+  background-color: white;
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px 10px 0 0;
+  height: auto;
+  min-height: 180px;
+  padding: 12px;
 }
 
 .folder-icon-container {
   position: relative;
   background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-  border-radius: 8px;
-  height: 120px;
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border: 1px solid #e2e8f0;
+  border-radius: 8px;
 }
 
 .folder-icon {
-  font-size: 48px;
-  opacity: 0.8;
+  font-size: 64px;
+  opacity: 0.7;
   transition: all 0.2s ease;
 }
 
 .folder-card:hover .folder-icon {
-  opacity: 1;
-  transform: scale(1.05);
+  opacity: 0.9;
+  transform: scale(1.03);
 }
 
 .folder-overlay {
@@ -235,55 +237,13 @@ export default {
   line-height: 1.2;
 }
 
-.folder-meta {
-  padding: 0 16px 16px 16px;
-}
-
-.folder-type {
-  font-size: 14px;
+.item-metadata {
+  font-size: 13px;
   color: #6b7280;
-  margin: 0 0 4px 0;
-  font-weight: 500;
+  font-weight: 400;
+  margin: 0;
+  line-height: 1.2;
 }
 
-.folder-size {
-  font-size: 12px;
-  color: #9ca3af;
-  margin: 0 0 8px 0;
-}
 
-.folder-classification {
-  margin-top: 8px;
-}
-
-.classification-badge {
-  display: inline-block;
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  line-height: 1;
-}
-
-.classification-badge.high-confidence {
-  background-color: #dcfce7;
-  color: #166534;
-}
-
-.classification-badge.medium-confidence {
-  background-color: #fef3c7;
-  color: #92400e;
-}
-
-.classification-badge.low-confidence {
-  background-color: #fee2e2;
-  color: #991b1b;
-}
-
-.classification-badge.generic {
-  background-color: #f3f4f6;
-  color: #6b7280;
-}
 </style>
