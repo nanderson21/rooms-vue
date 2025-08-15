@@ -1,32 +1,32 @@
 <template>
-  <div class="embedded-collection-view">
+  <div class="embedded-room-view">
     <!-- Show media item detail if one is selected -->
     <div v-if="selectedMediaItem" class="media-detail-container">
       <div class="media-detail-header">
-        <button @click="backToCollection" class="back-button">
+        <button @click="backToRoom" class="back-button">
           <font-awesome-icon :icon="['fas', 'arrow-left']" />
-          <span>Back to {{ collection.title || 'Collection' }}</span>
+          <span>Back to {{ room.title || 'Room' }}</span>
         </button>
       </div>
       
-      <!-- Embed the CollectionItemDetail component -->
-      <CollectionItemDetail
-        :collectionId="collection.id"
+      <!-- Embed the RoomItemDetail component -->
+      <RoomItemDetail
+        :roomId="room.id"
         :mediaItemId="selectedMediaItem.id"
         :mediaItem="selectedMediaItem"
-        :collection="collection"
+        :room="room"
         :isEmbedded="true"
         class="embedded-media-detail"
       />
     </div>
 
-    <!-- Show collection grid when no item is selected -->
-    <div v-else class="collection-content">
-      <div class="hero-section" v-if="collection.id">
+    <!-- Show room grid when no item is selected -->
+    <div v-else class="room-content">
+      <div class="hero-section" v-if="room.id">
         <div class="hero-background">
           <img 
-            :src="collection.thumbnail || ''" 
-            :alt="collection.title || 'Collection'"
+            :src="room.thumbnail || ''" 
+            :alt="room.title || 'Room'"
             class="hero-image"
           />
           <div class="hero-overlay"></div>
@@ -34,18 +34,18 @@
         
         <div class="hero-content">
           <h1 class="hero-title">
-            {{ collection.title || 'Collection' }}
+            {{ room.title || 'Room' }}
           </h1>
           
           <div class="hero-meta">
             <span class="hero-meta-text">
-              {{ filteredItems.length }} items with video preview • {{ collection.totalSize || '0 KB' }}
+              {{ filteredItems.length }} items with video preview • {{ room.totalSize || '0 KB' }}
             </span>
-            <div v-if="collection.status !== 'default' && collection.statusText" 
-                 :class="getStatusClass(collection.status)"
+            <div v-if="room.status !== 'default' && room.statusText" 
+                 :class="getStatusClass(room.status)"
                  class="status-badge">
               <span class="status-icon">
-                <svg v-if="collection.status === 'secure'" viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none">
+                <svg v-if="room.status === 'secure'" viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none">
                   <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                   <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
                 </svg>
@@ -56,7 +56,7 @@
                   <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                 </svg>
               </span>
-              {{ collection.statusText }}
+              {{ room.statusText }}
             </div>
           </div>
         </div>
@@ -139,10 +139,31 @@
                 <!-- Image items -->
                 <div v-if="isImage(item)" class="item-thumbnail-container">
                   <div class="thumbnail-wrapper">
+                    <!-- Show loading indicator if file is being processed -->
+                    <div v-if="item.isProcessing" class="thumbnail-status-indicator processing">
+                      <font-awesome-icon :icon="['fas', 'sync-alt']" spin />
+                      <span>Processing...</span>
+                    </div>
+                    
+                    <!-- Show offline indicator for offline files -->
+                    <div v-else-if="item.isOffline" class="thumbnail-status-indicator offline">
+                      <font-awesome-icon :icon="['fas', 'exclamation-triangle']" />
+                      <span>Offline</span>
+                    </div>
+                    
+                    <!-- Show image placeholder if no thumbnail available -->
+                    <div v-else-if="!item.thumbnail" class="thumbnail-status-indicator placeholder">
+                      <font-awesome-icon :icon="['fas', 'image']" />
+                      <span>No Preview</span>
+                    </div>
+                    
+                    <!-- Show actual thumbnail -->
                     <img 
+                      v-else
                       :src="item.thumbnail" 
                       :alt="item.title" 
                       class="item-thumbnail"
+                      @error="handleThumbnailError"
                     />
                   </div>
                 </div>
@@ -150,8 +171,27 @@
                 <!-- Video items -->
                 <div v-else-if="isVideo(item)" class="item-thumbnail-container">
                   <div class="thumbnail-wrapper">
+                    <!-- Show loading indicator if file is being processed -->
+                    <div v-if="item.isProcessing" class="thumbnail-status-indicator processing">
+                      <font-awesome-icon :icon="['fas', 'sync-alt']" spin />
+                      <span>Processing...</span>
+                    </div>
+                    
+                    <!-- Show offline indicator for offline files -->
+                    <div v-else-if="item.isOffline" class="thumbnail-status-indicator offline">
+                      <font-awesome-icon :icon="['fas', 'exclamation-triangle']" />
+                      <span>Offline</span>
+                    </div>
+                    
+                    <!-- Show video placeholder if no thumbnail available -->
+                    <div v-else-if="!item.thumbnail" class="thumbnail-status-indicator placeholder">
+                      <font-awesome-icon :icon="['fas', 'video']" />
+                      <span>No Preview</span>
+                    </div>
+                    
+                    <!-- Show scrubbing sprite if available -->
                     <ScrubbableImage
-                      v-if="item.spriteUrl"
+                      v-else-if="item.spriteUrl"
                       :spriteUrl="item.spriteUrl"
                       :width="300"
                       :height="200"
@@ -160,45 +200,63 @@
                     >
                       <template #overlay>
                         <div class="play-button-container">
-                          <div 
-                            class="play-button"
-                           >
+                          <div class="play-button">
                             <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none">
                               <polygon points="5 3 19 12 5 21 5 3"></polygon>
                             </svg>
                           </div>
                         </div>
-                        <div v-if="item.duration" class="duration-badge">{{ item.duration }}</div>
+                        <div v-if="item.duration && item.formattedDuration" class="duration-badge">{{ item.formattedDuration }}</div>
                       </template>
                     </ScrubbableImage>
+                    
+                    <!-- Show regular thumbnail -->
                     <img 
                       v-else
                       :src="item.thumbnail" 
                       :alt="item.title" 
                       class="item-thumbnail"
+                      @error="handleThumbnailError"
                     />
                   </div>
-                  <div v-if="!item.spriteUrl" class="play-button-container">
-                    <div 
-                      class="play-button"
-                     >
+                  
+                  <!-- Play button and duration for non-sprite videos -->
+                  <div v-if="!item.spriteUrl && item.thumbnail" class="play-button-container">
+                    <div class="play-button">
                       <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none">
                         <polygon points="5 3 19 12 5 21 5 3"></polygon>
                       </svg>
                     </div>
                   </div>
-                  <div v-if="!item.spriteUrl && item.duration" class="duration-badge">{{ item.duration }}</div>
+                  <div v-if="!item.spriteUrl && item.duration && item.formattedDuration && item.thumbnail" class="duration-badge">{{ item.formattedDuration }}</div>
                 </div>
                 
                 <!-- Audio items -->
                 <div v-else-if="isAudio(item)" class="item-thumbnail-container">
                   <div class="thumbnail-wrapper">
+                    <!-- Show loading indicator if file is being processed -->
+                    <div v-if="item.isProcessing" class="thumbnail-status-indicator processing">
+                      <font-awesome-icon :icon="['fas', 'sync-alt']" spin />
+                      <span>Processing...</span>
+                    </div>
+                    
+                    <!-- Show offline indicator for offline files -->
+                    <div v-else-if="item.isOffline" class="thumbnail-status-indicator offline">
+                      <font-awesome-icon :icon="['fas', 'exclamation-triangle']" />
+                      <span>Offline</span>
+                    </div>
+                    
+                    <!-- Show thumbnail if available -->
                     <img 
+                      v-else-if="item.thumbnail"
                       :src="item.thumbnail" 
                       :alt="item.title" 
                       class="item-thumbnail"
+                      @error="handleThumbnailError"
                     />
                   </div>
+                  
+                  <!-- Audio icon overlay (always show for audio files) -->
                   <div class="audio-icon-container">
                     <div class="audio-icon">
                       <svg viewBox="0 0 24 24" width="40" height="40" stroke="currentColor" stroke-width="2" fill="none">
@@ -212,7 +270,30 @@
                 
                 <!-- Document items -->
                 <div v-else class="item-thumbnail-container document-container">
-                  <div class="document-icon">
+                  <!-- Show loading indicator if file is being processed -->
+                  <div v-if="item.isProcessing" class="thumbnail-status-indicator processing">
+                    <font-awesome-icon :icon="['fas', 'sync-alt']" spin />
+                    <span>Processing...</span>
+                  </div>
+                  
+                  <!-- Show offline indicator for offline files -->
+                  <div v-else-if="item.isOffline" class="thumbnail-status-indicator offline">
+                    <font-awesome-icon :icon="['fas', 'exclamation-triangle']" />
+                    <span>Offline</span>
+                  </div>
+                  
+                  <!-- Show thumbnail if available -->
+                  <div v-else-if="item.thumbnail" class="thumbnail-wrapper">
+                    <img 
+                      :src="item.thumbnail" 
+                      :alt="item.title" 
+                      class="item-thumbnail"
+                      @error="handleThumbnailError"
+                    />
+                  </div>
+                  
+                  <!-- Document icon (fallback or overlay) -->
+                  <div v-else class="document-icon">
                     <svg viewBox="0 0 24 24" width="40" height="40" stroke="currentColor" stroke-width="2" fill="none">
                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                       <polyline points="14 2 14 8 20 8"></polyline>
@@ -221,6 +302,11 @@
                       <polyline points="10 9 9 9 8 9"></polyline>
                     </svg>
                   </div>
+                </div>
+                
+                <!-- Offline indicator for files not available in filesystem -->
+                <div v-if="item.showOfflineIndicator" class="offline-indicator" title="File is offline - not found in filesystem">
+                  <font-awesome-icon :icon="['fas', 'exclamation-triangle']" />
                 </div>
               </div>
               <div class="item-header">
@@ -252,16 +338,29 @@
                   <td>
                     <div class="list-item-link">
                       <div class="list-item-thumbnail">
+                        <!-- Show thumbnail if available -->
                         <div 
-                          v-if="isImage(item)"
+                          v-if="item.thumbnail && !item.isOffline"
                           class="list-thumbnail-wrapper"
-                                                 >
+                        >
                           <img 
                             :src="item.thumbnail" 
                             :alt="item.title" 
                             class="list-thumbnail"
+                            @error="handleThumbnailError"
                           />
                         </div>
+                        
+                        <!-- Show status indicators -->
+                        <div v-else-if="item.isProcessing" class="list-status-indicator processing">
+                          <font-awesome-icon :icon="['fas', 'sync-alt']" spin />
+                        </div>
+                        
+                        <div v-else-if="item.isOffline" class="list-status-indicator offline">
+                          <font-awesome-icon :icon="['fas', 'exclamation-triangle']" />
+                        </div>
+                        
+                        <!-- Show default icons for different file types -->
                         <div v-else class="list-icon">
                           <svg v-if="isVideo(item)" viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none">
                             <polygon points="23 7 16 12 23 17 23 7"></polygon>
@@ -271,6 +370,11 @@
                             <path d="M9 18V5l12-2v13"></path>
                             <circle cx="6" cy="18" r="3"></circle>
                             <circle cx="18" cy="16" r="3"></circle>
+                          </svg>
+                          <svg v-else-if="isImage(item)" viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                            <polyline points="21,15 16,10 5,21"></polyline>
                           </svg>
                           <svg v-else viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none">
                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
@@ -302,26 +406,26 @@
 
 <script>
 import { ref, computed, onMounted, watch, defineProps, defineEmits } from 'vue';
-import { getCollection, getCollectionItems } from '@/utils/mockData';
+import { getRoom, getRoomItems } from '@/utils/mockData';
 import ScrubbableImage from '@/components/scrubbable/ScrubbableImage.vue';
-import CollectionItemDetail from '@/views/CollectionItemDetail.vue';
+import RoomItemDetail from '@/views/RoomItemDetail.vue';
 import FolderCard from '@/components/FolderCard.vue';
 
 export default {
-  name: 'EmbeddedCollectionView',
+  name: 'EmbeddedRoomView',
   
   components: {
     ScrubbableImage,
-    CollectionItemDetail,
+    RoomItemDetail,
     FolderCard
   },
 
   props: {
-    collectionId: {
+    roomId: {
       type: String,
       default: 'nab-demo'
     },
-    collection: {
+    room: {
       type: Object,
       default: null
     },
@@ -340,14 +444,18 @@ export default {
     currentFolderPath: {
       type: String,
       default: null
+    },
+    selectedFileId: {
+      type: String,
+      default: null
     }
   },
 
-  emits: ['item-selected', 'folder-selected', 'folder-settings', 'back-to-collection', 'navigate-to-root', 'navigate-to-folder'],
+  emits: ['item-selected', 'folder-selected', 'folder-settings', 'back-to-room', 'navigate-to-root', 'navigate-to-folder'],
   
   setup(props, { emit }) {
     const viewType = ref('grid');
-    const collection = ref({});
+    const room = ref({});
     const items = ref([]);
     const selectedItemId = ref(null);
     const selectedMediaItem = ref(null);
@@ -395,11 +503,17 @@ export default {
       emit('folder-settings', folder);
     };
 
-    // Go back to collection view
-    const backToCollection = () => {
+    // Go back to room view
+    const backToRoom = () => {
       selectedMediaItem.value = null;
       selectedItemId.value = null;
-      emit('back-to-collection');
+      emit('back-to-room');
+    };
+    
+    // Handle thumbnail loading errors
+    const handleThumbnailError = (event) => {
+      console.warn('Thumbnail failed to load:', event.target.src);
+      // Could set a fallback or error state here
     };
     
     // Helper functions to determine item type
@@ -435,28 +549,28 @@ export default {
       }
     };
     
-    // Load collection data on component mount
+    // Load room data on component mount
     onMounted(() => {
-      if (props.collection && props.items) {
-        // Use external collection and items data
-        collection.value = props.collection;
+      if (props.room && props.items) {
+        // Use external room and items data
+        room.value = props.room;
         items.value = props.items;
       } else {
-        // Get collection data from mockData
-        collection.value = getCollection(props.collectionId) || { 
+        // Get room data from mockData
+        room.value = getRoom(props.roomId) || { 
           id: 'not-found',
-          title: 'Collection Not Found'
+          title: 'Room Not Found'
         };
         
-        // Get items for the collection
-        items.value = getCollectionItems(props.collectionId);
+        // Get items for the room
+        items.value = getRoomItems(props.roomId);
       }
     });
 
     // Watch for changes in external props
-    watch(() => props.collection, (newCollection) => {
-      if (newCollection) {
-        collection.value = newCollection;
+    watch(() => props.room, (newRoom) => {
+      if (newRoom) {
+        room.value = newRoom;
       }
     }, { immediate: true });
 
@@ -465,9 +579,40 @@ export default {
         items.value = newItems;
       }
     }, { immediate: true });
+
+    // Watch for selectedFileId prop and auto-select the media item
+    watch(() => props.selectedFileId, (newSelectedFileId) => {
+      if (newSelectedFileId && items.value?.length) {
+        // Find the item with matching ID
+        const item = items.value.find(item => item.id === newSelectedFileId);
+        if (item) {
+          console.log('Auto-selecting media item from selectedFileId:', item);
+          selectedMediaItem.value = item;
+          setSelectedItem(item.id);
+        } else {
+          console.warn('No item found for selectedFileId:', newSelectedFileId);
+        }
+      } else if (!newSelectedFileId) {
+        // Clear selection if no file ID provided
+        selectedMediaItem.value = null;
+        selectedItemId.value = null;
+      }
+    }, { immediate: true });
+
+    // Also watch items to handle case where selectedFileId arrives before items are loaded
+    watch(() => [props.selectedFileId, items.value], ([fileId, itemsArray]) => {
+      if (fileId && itemsArray?.length && !selectedMediaItem.value) {
+        const item = itemsArray.find(item => item.id === fileId);
+        if (item) {
+          console.log('Auto-selecting media item after items loaded:', item);
+          selectedMediaItem.value = item;
+          setSelectedItem(item.id);
+        }
+      }
+    }, { immediate: true });
     
     return {
-      collection,
+      room,
       items,
       filteredItems,
       viewType,
@@ -485,14 +630,15 @@ export default {
       selectMediaItem,
       selectFolder,
       openFolderSettings,
-      backToCollection
+      backToRoom,
+      handleThumbnailError
     };
   }
 };
 </script>
 
 <style scoped>
-.embedded-collection-view {
+.embedded-room-view {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -534,14 +680,14 @@ export default {
   overflow: hidden;
 }
 
-.collection-content {
+.room-content {
   display: flex;
   flex-direction: column;
   flex: 1;
   min-height: 0;
 }
 
-/* All the same styles from CollectionView.vue */
+/* All the same styles from RoomView.vue */
 .hero-section {
   position: relative;
   background-color: #18181b;
@@ -860,6 +1006,71 @@ export default {
   letter-spacing: 0.02em;
 }
 
+.offline-indicator {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background-color: rgba(245, 158, 11, 0.9);
+  color: white;
+  font-size: 12px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  z-index: 10;
+}
+
+.offline-indicator:hover {
+  background-color: rgba(245, 158, 11, 1);
+}
+
+/* Thumbnail status indicators */
+.thumbnail-status-indicator {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  background-color: #f8fafc;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+  gap: 8px;
+}
+
+.thumbnail-status-indicator.processing {
+  background-color: #f0f9ff;
+  color: #0369a1;
+}
+
+.thumbnail-status-indicator.processing svg {
+  font-size: 24px;
+  color: #0369a1;
+}
+
+.thumbnail-status-indicator.offline {
+  background-color: #fef3c7;
+  color: #d97706;
+}
+
+.thumbnail-status-indicator.offline svg {
+  font-size: 24px;
+  color: #d97706;
+}
+
+.thumbnail-status-indicator.placeholder {
+  background-color: #f3f4f6;
+  color: #6b7280;
+}
+
+.thumbnail-status-indicator.placeholder svg {
+  font-size: 24px;
+  color: #6b7280;
+}
+
 .audio-icon-container,
 .document-container {
   display: flex;
@@ -991,6 +1202,24 @@ tr:last-child td {
 
 .list-icon {
   color: #6b7280;
+}
+
+/* List view status indicators */
+.list-status-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 16px;
+}
+
+.list-status-indicator.processing {
+  color: #0369a1;
+}
+
+.list-status-indicator.offline {
+  color: #d97706;
 }
 
 .list-item-title {

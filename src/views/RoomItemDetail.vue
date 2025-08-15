@@ -4,7 +4,7 @@
     <div class="item-header-container" v-if="mediaItem && mediaItem.id">
       <div class="item-header-content">
         <div v-if="!isEmbedded" class="back-nav">
-          <router-link :to="`/collection/${collectionId || ''}`" class="back-button">
+          <router-link :to="`/room/${roomId || ''}`" class="back-button">
             <svg width="1em" height="1em" viewBox="0 0 24 24" class="back-icon">
               <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
             </svg>
@@ -64,11 +64,11 @@
                 
                 <VideoPlayerWithComments
                   ref="videoPlayer"
-                  :src="mediaItem && mediaItem.previewVideo ? mediaItem.previewVideo : ''"
+                  :src="videoSrc"
                   :poster="mediaItem && mediaItem.thumbnail ? mediaItem.thumbnail : ''"
                   :comments="comments || []"
                   :autoPlay="false"
-                  :transitionName="`video-image-${collectionId || 'default'}-${mediaItem.id || 'default'}`"
+                  :transitionName="`video-image-${roomId || 'default'}-${mediaItem.id || 'default'}`"
                   @play="onVideoPlay"
                   @pause="onVideoPause"
                   @timeupdate="onVideoTimeUpdate"
@@ -106,7 +106,7 @@
                   </div>
                   <div class="audio-info">
                     <h3 class="audio-title">{{ mediaItem?.title || 'Audio Track' }}</h3>
-                    <p class="audio-subtitle">{{ collection?.title || 'Collection' }}</p>
+                    <p class="audio-subtitle">{{ room?.title || 'Room' }}</p>
                   </div>
                 </div>
                 
@@ -418,18 +418,19 @@
 <script>
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { getCollection, getMediaItem, getComments, addComment as addCommentToStore } from '@/utils/mockData';
+import { getRoom, getMediaItem, getComments, addComment as addCommentToStore } from '@/utils/mockData';
+import { roomService } from '@/services/roomService.js';
 import VideoPlayerWithComments from '@/components/VideoPlayerWithComments.vue';
 
 export default {
-  name: 'CollectionItemDetail',
+  name: 'RoomItemDetail',
   
   components: {
     VideoPlayerWithComments
   },
 
   props: {
-    collectionId: {
+    roomId: {
       type: String,
       default: null
     },
@@ -441,7 +442,7 @@ export default {
       type: Object,
       default: null
     },
-    collection: {
+    room: {
       type: Object,
       default: null
     },
@@ -459,7 +460,7 @@ export default {
     const commentTimeline = ref(null);
     
     // Data
-    const collection = ref({});
+    const room = ref({});
     const mediaItem = ref({});
     const comments = ref([]);
     const activeTab = ref('comments');
@@ -470,8 +471,8 @@ export default {
     const showTimestamp = ref(false);
     
     // Computed values
-    const collectionId = computed(() => props.collectionId || route.params.id || 'nab-demo');
-    const mediaItemId = computed(() => props.mediaItemId || route.params.itemId || '1');
+    const roomId = computed(() => props.roomId || route.params.id || 'nab-demo');
+    const mediaItemId = computed(() => props.mediaItemId || route.params.itemId || route.query.file || '1');
     
     const isVideo = computed(() => {
       if (!mediaItem.value) return false;
@@ -496,6 +497,27 @@ export default {
       if (!duration.value) return 0;
       return (currentTime.value / duration.value) * 100;
     });
+    
+    // Computed property for video source that handles FileSystem files
+    const videoSrc = ref('');
+    const createVideoSource = async () => {
+      if (mediaItem.value?.fileHandle) {
+        // FileSystem API file - create blob URL
+        try {
+          const file = await mediaItem.value.fileHandle.getFile();
+          videoSrc.value = URL.createObjectURL(file);
+          console.log('Created video blob URL for FileSystem file:', videoSrc.value);
+        } catch (error) {
+          console.error('Error creating video blob URL:', error);
+          videoSrc.value = '';
+        }
+      } else if (mediaItem.value?.previewVideo) {
+        // Regular media item with preview video
+        videoSrc.value = mediaItem.value.previewVideo;
+      } else {
+        videoSrc.value = '';
+      }
+    };
     
     const sortedComments = computed(() => {
       return [...comments.value].sort((a, b) => a.timestamp - b.timestamp);
@@ -598,7 +620,7 @@ export default {
         .substring(0, 2);
     };
     
-    const addComment = () => {
+    const addComment = async () => {
       if (!newComment.value.trim()) return;
       
       // Create a new comment object
@@ -607,15 +629,41 @@ export default {
         content: newComment.value.trim(),
         timestamp: currentTime.value,
         author: {
-          id: 'user-123',
-          name: 'Current User',
-          avatar: getRandomAvatar()
+          id: 'user-you',
+          name: 'You',
+          avatar: null
         },
         createdAt: new Date().toISOString()
       };
       
-      // Add comment to the store
-      addCommentToStore(collectionId.value, mediaItemId.value, comment);
+      // Save to database if this is a filesystem room
+      if (mediaItem.value?.id && room.value?.dbManager) {
+        try {
+          console.log(`Saving comment to database for file ${mediaItem.value.id}:`, comment);
+          console.log('Database manager for saving:', room.value.dbManager);
+          
+          // Ensure database is initialized
+          if (!room.value.dbManager.isInitialized) {
+            console.log('Initializing database manager for comment save...');
+            await room.value.dbManager.initialize();
+          }
+          
+          const commentId = await room.value.dbManager.addComment(mediaItem.value.id, comment);
+          comment.id = commentId; // Use the database ID
+          console.log(`Comment saved to database with ID ${commentId}`);
+        } catch (error) {
+          console.error('Error saving comment to database:', error);
+        }
+      } else {
+        console.log('Comment save condition not met:', {
+          hasMediaItemId: !!mediaItem.value?.id,
+          hasDbManager: !!room.value?.dbManager,
+          mediaItemId: mediaItem.value?.id,
+          roomId: room.value?.id
+        });
+        // Add comment to mock data store
+        addCommentToStore(roomId.value, mediaItemId.value, comment);
+      }
       
       // Update local comments
       comments.value.push(comment);
@@ -639,36 +687,113 @@ export default {
     };
     
     // Load data on mount
-    onMounted(() => {
-      console.log('CollectionItemDetail mounted');
+    onMounted(async () => {
+      console.log('RoomItemDetail mounted');
       console.log('Route params:', route.params);
       
-      // Use direct props if available, otherwise load from mockData
-      if (props.collection) {
-        collection.value = props.collection;
+      // Use direct props if available, otherwise load from appropriate source
+      if (props.room) {
+        room.value = props.room;
       } else {
-        collection.value = getCollection(collectionId.value) || {
-          id: 'not-found',
-          title: 'Collection Not Found'
-        };
+        // Try to get filesystem room from roomService first (needed for comment persistence)
+        const filesystemRoom = roomService.getRoom(roomId.value);
+        if (filesystemRoom) {
+          // Filesystem rooms already have dbManager property
+          room.value = filesystemRoom;
+          console.log('Loaded filesystem room with database manager:', room.value);
+        } else {
+          // Fallback to mock data for static rooms
+          room.value = getRoom(roomId.value) || {
+            id: 'not-found',
+            title: 'Room Not Found'
+          };
+          console.log('Loaded mock room:', room.value);
+        }
       }
-      console.log('Loaded collection:', collection.value);
+      console.log('Loaded room:', room.value);
       
       if (props.mediaItem) {
         mediaItem.value = props.mediaItem;
       } else {
-        mediaItem.value = getMediaItem(collectionId.value, mediaItemId.value) || {
-          id: 'not-found',
-          title: 'Item Not Found'
-        };
+        // For filesystem rooms, try to load the file from the room's live files
+        if (room.value?.type === 'filesystem' && room.value?.dbManager) {
+          try {
+            console.log(`Loading file ${mediaItemId.value} from filesystem room database`);
+            
+            // Ensure database is initialized
+            if (!room.value.dbManager.isInitialized) {
+              await room.value.dbManager.initialize();
+            }
+            
+            // Get all files and find the one we need
+            const allFiles = await roomService.getLiveRoomFiles(room.value.id);
+            const foundFile = allFiles.find(file => file.id === mediaItemId.value);
+            
+            if (foundFile) {
+              mediaItem.value = foundFile;
+              console.log('Loaded filesystem file:', foundFile);
+            } else {
+              console.warn(`File ${mediaItemId.value} not found in filesystem room`);
+              mediaItem.value = {
+                id: mediaItemId.value,
+                title: 'File Not Found',
+                type: 'unknown'
+              };
+            }
+          } catch (error) {
+            console.error('Error loading filesystem file:', error);
+            mediaItem.value = {
+              id: mediaItemId.value,
+              title: 'Error Loading File',
+              type: 'unknown'
+            };
+          }
+        } else {
+          // Fallback to mock data for static rooms
+          mediaItem.value = getMediaItem(roomId.value, mediaItemId.value) || {
+            id: 'not-found',
+            title: 'Item Not Found'
+          };
+        }
       }
       console.log('Loaded media item:', mediaItem.value);
       
-      // Load comments (only for mockData items for now)
+      // Create video source for FileSystem files
+      await createVideoSource();
+      
+      // Load comments
       if (!props.mediaItem) {
-        comments.value = getComments(collectionId.value, mediaItemId.value) || [];
+        // Mock data comments
+        comments.value = getComments(roomId.value, mediaItemId.value) || [];
+      } else if (mediaItem.value?.id && room.value?.dbManager) {
+        // Load comments from room database for filesystem items
+        try {
+          console.log(`Loading comments for file ${mediaItem.value.id} from database manager`, room.value.dbManager);
+          console.log('Database manager initialized?', room.value.dbManager.isInitialized);
+          
+          // Ensure database is initialized
+          if (!room.value.dbManager.isInitialized) {
+            console.log('Initializing database manager...');
+            await room.value.dbManager.initialize();
+          }
+          
+          const dbComments = await room.value.dbManager.getComments(mediaItem.value.id);
+          comments.value = dbComments;
+          console.log(`Loaded ${dbComments.length} comments from database for file ${mediaItem.value.id}:`, dbComments);
+        } catch (error) {
+          console.error('Error loading comments from database:', error);
+          comments.value = [];
+        }
       } else {
-        comments.value = []; // Filesystem items don't have comments yet
+        console.log('Comment loading condition not met:', {
+          hasMediaItemId: !!mediaItem.value?.id,
+          hasDbManager: !!room.value?.dbManager,
+          mediaItemId: mediaItem.value?.id,
+          roomId: room.value?.id,
+          roomType: room.value?.type,
+          room: room.value
+        });
+        comments.value = [];
       }
       console.log('Loaded comments:', comments.value);
       
@@ -688,20 +813,97 @@ export default {
     
     // Watch for route changes
     watch(
-      () => route.params,
-      () => {
+      () => [route.params, route.query],
+      async () => {
         // Load new data when route changes
-        collection.value = getCollection(collectionId.value) || {
-          id: 'not-found',
-          title: 'Collection Not Found'
-        };
+        // Try to get filesystem room from roomService first (needed for comment persistence)
+        const filesystemRoom = roomService.getRoom(roomId.value);
+        if (filesystemRoom) {
+          // Filesystem rooms already have dbManager property
+          room.value = filesystemRoom;
+          console.log('Route change: Loaded filesystem room with database manager:', room.value);
+        } else {
+          // Fallback to mock data for static rooms
+          room.value = getRoom(roomId.value) || {
+            id: 'not-found',
+            title: 'Room Not Found'
+          };
+          console.log('Route change: Loaded mock room:', room.value);
+        }
         
-        mediaItem.value = getMediaItem(collectionId.value, mediaItemId.value) || {
-          id: 'not-found',
-          title: 'Item Not Found'
-        };
+        // For filesystem rooms, try to load the file from the room's live files
+        if (room.value?.type === 'filesystem' && room.value?.dbManager) {
+          try {
+            console.log(`Route change: Loading file ${mediaItemId.value} from filesystem room database`);
+            
+            // Ensure database is initialized
+            if (!room.value.dbManager.isInitialized) {
+              await room.value.dbManager.initialize();
+            }
+            
+            // Get all files and find the one we need
+            const allFiles = await roomService.getLiveRoomFiles(room.value.id);
+            const foundFile = allFiles.find(file => file.id === mediaItemId.value);
+            
+            if (foundFile) {
+              mediaItem.value = foundFile;
+              console.log('Route change: Loaded filesystem file:', foundFile);
+            } else {
+              console.warn(`Route change: File ${mediaItemId.value} not found in filesystem room`);
+              mediaItem.value = {
+                id: mediaItemId.value,
+                title: 'File Not Found',
+                type: 'unknown'
+              };
+            }
+          } catch (error) {
+            console.error('Route change: Error loading filesystem file:', error);
+            mediaItem.value = {
+              id: mediaItemId.value,
+              title: 'Error Loading File',
+              type: 'unknown'
+            };
+          }
+        } else {
+          // Fallback to mock data for static rooms
+          mediaItem.value = getMediaItem(roomId.value, mediaItemId.value) || {
+            id: 'not-found',
+            title: 'Item Not Found'
+          };
+        }
         
-        comments.value = getComments(collectionId.value, mediaItemId.value) || [];
+        // Load comments based on data source
+        if (mediaItem.value?.id && room.value?.dbManager) {
+          // Load comments from room database for filesystem items
+          try {
+            console.log(`Route change: Loading comments for file ${mediaItem.value.id} from database`);
+            console.log('Route change: Database manager initialized?', room.value.dbManager.isInitialized);
+            
+            // Ensure database is initialized
+            if (!room.value.dbManager.isInitialized) {
+              console.log('Route change: Initializing database manager...');
+              await room.value.dbManager.initialize();
+            }
+            
+            const dbComments = await room.value.dbManager.getComments(mediaItem.value.id);
+            comments.value = dbComments;
+            console.log(`Route change: Loaded ${dbComments.length} comments from database:`, dbComments);
+          } catch (error) {
+            console.error('Route change: Error loading comments from database:', error);
+            comments.value = [];
+          }
+        } else {
+          // Fallback to mock data
+          comments.value = getComments(roomId.value, mediaItemId.value) || [];
+          console.log(`Route change: Loaded ${comments.value.length} comments from mock data`);
+          console.log('Route change: Comment loading condition not met:', {
+            hasMediaItemId: !!mediaItem.value?.id,
+            hasDbManager: !!room.value?.dbManager,
+            mediaItemId: mediaItem.value?.id,
+            roomId: room.value?.id,
+            roomType: room.value?.type
+          });
+        }
         
         // Reset state
         activeTab.value = 'comments';
@@ -713,20 +915,22 @@ export default {
     );
 
     // Watch for changes in props
-    watch(() => props.mediaItem, (newMediaItem) => {
+    watch(() => props.mediaItem, async (newMediaItem) => {
       if (newMediaItem) {
         mediaItem.value = newMediaItem;
+        // Recreate video source when media item changes
+        await createVideoSource();
       }
     });
 
-    watch(() => props.collection, (newCollection) => {
-      if (newCollection) {
-        collection.value = newCollection;
+    watch(() => props.room, (newRoom) => {
+      if (newRoom) {
+        room.value = newRoom;
       }
     });
     
     return {
-      collection,
+      room,
       mediaItem,
       comments,
       activeTab,
@@ -735,7 +939,7 @@ export default {
       duration,
       newComment,
       showTimestamp,
-      collectionId,
+      roomId,
       mediaItemId,
       videoPlayer,
       commentInput,
@@ -745,6 +949,7 @@ export default {
       isAudio,
       isDocument,
       progressPercentage,
+      videoSrc,
       sortedComments,
       startPlayback,
       togglePlayback,

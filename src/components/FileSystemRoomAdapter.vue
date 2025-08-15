@@ -1,14 +1,15 @@
 <template>
-  <EmbeddedCollectionView
-    :collection="adaptedCollection"
+  <EmbeddedRoomView
+    :room="adaptedRoom"
     :items="adaptedItems"
     :folders="adaptedFolders"
     :breadcrumbs="breadcrumbs"
     :currentFolderPath="currentFolderPath"
+    :selectedFileId="selectedFileId"
     @item-selected="handleItemSelected"
     @folder-selected="handleFolderSelected"
     @folder-settings="handleFolderSettings"
-    @back-to-collection="handleBackToCollection"
+    @back-to-room="handleBackToRoom"
     @navigate-to-root="navigateToRoot"
     @navigate-to-folder="navigateToFolder"
   />
@@ -16,15 +17,15 @@
 
 <script>
 import { computed, watch, ref } from 'vue';
-import EmbeddedCollectionView from './EmbeddedCollectionView.vue';
+import EmbeddedRoomView from './EmbeddedRoomView.vue';
 import { roomService } from '../services/roomService.js';
 import { folderRolePersistence } from '../services/folderRolePersistence.js';
 
 export default {
-  name: 'FileSystemCollectionAdapter',
+  name: 'FileSystemRoomAdapter',
   
   components: {
-    EmbeddedCollectionView
+    EmbeddedRoomView
   },
 
   props: {
@@ -35,10 +36,14 @@ export default {
     currentFolderPath: {
       type: String,
       default: null
+    },
+    selectedFileId: {
+      type: String,
+      default: null
     }
   },
 
-  emits: ['item-selected', 'folder-selected', 'folder-settings', 'back-to-collection'],
+  emits: ['item-selected', 'folder-selected', 'folder-settings', 'back-to-room'],
 
   setup(props, { emit }) {
     // Navigation state
@@ -47,9 +52,29 @@ export default {
     
     // Get reactive room data
     const room = computed(() => roomService.getRoom(props.roomId));
+    
+    // Live files data
+    const roomFiles = ref([]);
+    const isLoadingFiles = ref(false);
+    
+    // Load files for the room
+    const loadRoomFiles = async () => {
+      if (!props.roomId) return;
+      
+      isLoadingFiles.value = true;
+      try {
+        const files = await roomService.getLiveRoomFiles(props.roomId);
+        roomFiles.value = files;
+      } catch (error) {
+        console.error('Error loading room files in adapter:', error);
+        roomFiles.value = [];
+      } finally {
+        isLoadingFiles.value = false;
+      }
+    };
 
-    // Adapt room data to look like a collection
-    const adaptedCollection = computed(() => {
+    // Adapt room data to look like a room
+    const adaptedRoom = computed(() => {
       if (!room.value) {
         return {
           id: props.roomId,
@@ -66,18 +91,20 @@ export default {
         thumbnail: room.value.thumbnail,
         totalSize: room.value.totalSize,
         status: room.value.status || 'ready',
-        statusText: getStatusText(room.value.status)
+        statusText: getStatusText(room.value.status),
+        type: room.value.type || 'filesystem', // Ensure type is included for comment persistence
+        dbManager: room.value.dbManager // Critical: Include database manager for comment persistence
       };
     });
 
     // Extract folders from the room's folder tree
-    const extractFoldersFromTree = (room) => {
-      if (!room?.files) return [];
+    const extractFoldersFromTree = (files) => {
+      if (!files || !files.length) return [];
       
       const folderMap = new Map();
       
       // Build folder structure from file paths
-      room.files.forEach(file => {
+      files.forEach(file => {
         let fullPath = '';
         if (file.fullPath) {
           fullPath = file.fullPath;
@@ -134,9 +161,9 @@ export default {
 
     // Adapt folders for display
     const adaptedFolders = computed(() => {
-      if (!room.value) return [];
+      if (!roomFiles.value.length) return [];
       
-      const allFolders = extractFoldersFromTree(room.value);
+      const allFolders = extractFoldersFromTree(roomFiles.value);
       
       // Filter folders based on currentFolderPath
       const filteredFolders = allFolders.filter(folder => {
@@ -203,13 +230,27 @@ export default {
              'Assigned Role';
     };
 
-    // Adapt files to look like collection items
+    // Helper function to determine if a file type should generate thumbnails
+    const shouldGenerateThumbnail = (mimeType) => {
+      if (!mimeType) return false;
+      
+      const thumbnailSupportedTypes = [
+        'image/', // All image types
+        'video/', // All video types  
+        'application/pdf', // PDF files
+        // Add other types that support thumbnail generation
+      ];
+      
+      return thumbnailSupportedTypes.some(type => mimeType.startsWith(type));
+    };
+
+    // Adapt files to look like room items
     const adaptedItems = computed(() => {
-      if (!room.value || !room.value.files) {
+      if (!roomFiles.value.length) {
         return [];
       }
 
-      const filteredFiles = room.value.files.filter(file => {
+      const filteredFiles = roomFiles.value.filter(file => {
         if (!file.fullPath) return false; // Skip files without a fullPath
 
         if (!currentFolderPath.value) {
@@ -232,7 +273,8 @@ export default {
         mimetype: file.type,
         filetype: getFileType(file.type),
         filesize: formatFileSize(file.size),
-        duration: file.duration || file.formattedDuration,
+        duration: file.duration,
+        formattedDuration: file.formattedDuration,
         width: file.width,
         height: file.height,
         createdDate: formatDate(file.lastModified),
@@ -240,7 +282,12 @@ export default {
         // Add filesystem-specific properties
         path: file.path,
         isLocal: true,
-        fileHandle: file.handle // Keep handle for video playbook
+        fileHandle: file.handle, // Keep handle for video playbook
+        // Status indicators
+        isOnline: file.isOnline !== false, // Default to online if not specified
+        isOffline: file.isOffline === true, // Only true if explicitly set
+        showOfflineIndicator: file.isOffline === true, // Show hazard icon for offline files
+        isProcessing: file.isOnline && !file.thumbnail && !file.isOffline && shouldGenerateThumbnail(file.type) // Only show processing for files that should have thumbnails
       }));
     });
 
@@ -287,9 +334,9 @@ export default {
       emit('folder-settings', folder);
     };
 
-    // Handle back to collection
-    const handleBackToCollection = () => {
-      emit('back-to-collection');
+    // Handle back to room
+    const handleBackToRoom = () => {
+      emit('back-to-room');
     };
 
     // Utility functions
@@ -329,24 +376,30 @@ export default {
       return date.toLocaleDateString();
     };
 
+    // Load files when component mounts or roomId changes
+    watch(() => props.roomId, loadRoomFiles, { immediate: true });
 
     return {
-      adaptedCollection,
+      adaptedRoom,
       adaptedItems,
       adaptedFolders,
       breadcrumbs,
       currentFolderPath,
+      selectedFileId: computed(() => props.selectedFileId),
+      roomFiles,
+      isLoadingFiles,
+      loadRoomFiles,
       handleItemSelected,
       handleFolderSelected,
       handleFolderSettings,
       navigateToFolder,
       navigateToRoot,
-      handleBackToCollection
+      handleBackToRoom
     };
   }
 };
 </script>
 
 <style scoped>
-/* No additional styles needed - inherits from EmbeddedCollectionView */
+/* No additional styles needed - inherits from EmbeddedRoomView */
 </style>

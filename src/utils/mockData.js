@@ -1,4 +1,4 @@
-// Mock data for collections and media items
+// Mock data for rooms and media items (collections maintained for backward compatibility)
 // Example sprite URL for video scrubbing (5x10 grid of frames)
 const exampleSpriteUrl = 'https://i.imgur.com/qX5VT3S.jpg'; // Sample sprite sheet
 
@@ -149,14 +149,24 @@ export const commentsStorage = {
   ]
 };
 
-// Helper function to get a collection by ID
-export function getCollection(id) {
+// Helper function to get a room by ID
+export function getRoom(id) {
   return collections.find(collection => collection.id === id) || null;
 }
 
-// Helper function to get media items for a collection
+// Backward compatibility alias
+export function getCollection(id) {
+  return getRoom(id);
+}
+
+// Helper function to get media items for a room
+export function getRoomItems(roomId) {
+  return mediaItems.filter(item => item.projectId === roomId);
+}
+
+// Backward compatibility alias
 export function getCollectionItems(collectionId) {
-  return mediaItems.filter(item => item.projectId === collectionId);
+  return getRoomItems(collectionId);
 }
 
 // Helper function to get a media item by its ID and collection ID
@@ -405,7 +415,7 @@ export function getRooms() {
   return rooms;
 }
 
-export function getRoom(roomId) {
+export function getRoomData(roomId) {
   return rooms.find(room => room.id === roomId);
 }
 

@@ -1,531 +1,630 @@
 /**
- * Room Database Service - Manages SQLite databases for room configurations
- * Uses sql.js for in-browser SQLite support
+ * Room Database Service
+ * Manages SQLite databases for .room folders with all metadata, analysis, and thumbnails
  */
 
 import initSqlJs from 'sql.js';
 
-// SQLite instance
+// SQLite database schema for .room folders
+const ROOM_DATABASE_SCHEMA = `
+  -- Room metadata and configuration
+  CREATE TABLE IF NOT EXISTS room_metadata (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_id TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    directory_path TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_accessed DATETIME DEFAULT CURRENT_TIMESTAMP,
+    is_active BOOLEAN DEFAULT 1,
+    total_files INTEGER DEFAULT 0,
+    total_size INTEGER DEFAULT 0,
+    has_video BOOLEAN DEFAULT 0,
+    has_images BOOLEAN DEFAULT 0,
+    has_audio BOOLEAN DEFAULT 0,
+    has_documents BOOLEAN DEFAULT 0,
+    thumbnail_path TEXT,
+    index_version INTEGER DEFAULT 1
+  );
+
+  -- File metadata and analysis results
+  CREATE TABLE IF NOT EXISTS files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    file_id TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    path TEXT NOT NULL,
+    full_path TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    type TEXT,
+    category TEXT,
+    extension TEXT,
+    last_modified INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    -- Analysis results
+    thumbnail_path TEXT,
+    duration REAL,
+    width INTEGER,
+    height INTEGER,
+    bitrate INTEGER,
+    metadata_json TEXT, -- JSON blob for additional metadata
+    analysis_complete BOOLEAN DEFAULT 0,
+    processing_error TEXT
+  );
+
+  -- Comments on files
+  CREATE TABLE IF NOT EXISTS comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    file_id TEXT NOT NULL,
+    timestamp REAL DEFAULT 0,
+    content TEXT NOT NULL,
+    author_name TEXT DEFAULT 'User',
+    author_avatar TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (file_id) REFERENCES files(file_id)
+  );
+
+  -- Folder hierarchy and organization
+  CREATE TABLE IF NOT EXISTS folders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    path TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    parent_path TEXT,
+    file_count INTEGER DEFAULT 0,
+    total_size INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  -- Room activity log
+  CREATE TABLE IF NOT EXISTS activity_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    details TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (room_id) REFERENCES room_metadata (room_id)
+  );
+
+  -- Room settings and preferences
+  CREATE TABLE IF NOT EXISTS room_settings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    room_id TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value TEXT,
+    type TEXT DEFAULT 'string', -- 'string', 'number', 'boolean', 'json'
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (room_id) REFERENCES room_metadata (room_id),
+    UNIQUE (room_id, key)
+  );
+
+  -- Create indexes for performance
+  CREATE INDEX IF NOT EXISTS idx_files_category ON files (category);
+  CREATE INDEX IF NOT EXISTS idx_files_path ON files (path);
+  CREATE INDEX IF NOT EXISTS idx_files_full_path ON files (full_path);
+  CREATE INDEX IF NOT EXISTS idx_folders_path ON folders (path);
+  CREATE INDEX IF NOT EXISTS idx_folders_parent ON folders (parent_path);
+  CREATE INDEX IF NOT EXISTS idx_activity_room_id ON activity_log (room_id);
+  CREATE INDEX IF NOT EXISTS idx_activity_timestamp ON activity_log (timestamp);
+  CREATE INDEX IF NOT EXISTS idx_settings_room_key ON room_settings (room_id, key);
+`;
+
 let SQL = null;
 
 /**
  * Initialize SQL.js
+ * @returns {Promise<void>}
  */
-async function initSQL() {
+async function initializeSQL() {
   if (!SQL) {
-    SQL = await initSqlJs({
-      locateFile: file => `https://sql.js.org/dist/${file}`
-    });
+    try {
+      SQL = await initSqlJs({
+        // Use CDN for WASM file
+        locateFile: file => `https://sql.js.org/dist/${file}`
+      });
+      console.log('SQL.js initialized successfully');
+    } catch (error) {
+      console.error('Failed to initialize SQL.js:', error);
+      throw new Error('SQLite initialization failed');
+    }
   }
-  return SQL;
 }
 
 /**
- * Room database schema
+ * Create a new SQLite database for a room
+ * @returns {Object} SQL.js database instance
  */
-const DATABASE_SCHEMA = `
-  -- Room configuration table
-  CREATE TABLE IF NOT EXISTS rooms (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    path TEXT NOT NULL,
-    parent_room_id TEXT,
-    config TEXT, -- JSON configuration
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (parent_room_id) REFERENCES rooms(id)
-  );
-
-  -- File metadata table
-  CREATE TABLE IF NOT EXISTS files (
-    id TEXT PRIMARY KEY,
-    room_id TEXT NOT NULL,
-    name TEXT NOT NULL,
-    path TEXT NOT NULL,
-    type TEXT,
-    format TEXT,
-    size INTEGER,
-    checksum TEXT,
-    metadata TEXT, -- JSON metadata
-    handler_id TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (room_id) REFERENCES rooms(id),
-    FOREIGN KEY (handler_id) REFERENCES handlers(id)
-  );
-
-  -- File format handlers table
-  CREATE TABLE IF NOT EXISTS handlers (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    description TEXT,
-    file_extensions TEXT, -- JSON array of extensions
-    component_name TEXT,
-    ingest_script TEXT,
-    config TEXT, -- JSON configuration
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
-  -- Custom components table
-  CREATE TABLE IF NOT EXISTS components (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    description TEXT,
-    component_code TEXT, -- Vue component code
-    props_schema TEXT, -- JSON schema for props
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );
-
-  -- Ingest scripts table
-  CREATE TABLE IF NOT EXISTS scripts (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    description TEXT,
-    script_code TEXT, -- JavaScript code
-    handler_id TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (handler_id) REFERENCES handlers(id)
-  );
-
-  -- Room hierarchy and relationships
-  CREATE TABLE IF NOT EXISTS room_hierarchy (
-    id TEXT PRIMARY KEY,
-    room_id TEXT NOT NULL,
-    parent_room_id TEXT,
-    path_depth INTEGER,
-    is_managed BOOLEAN DEFAULT TRUE,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (room_id) REFERENCES rooms(id),
-    FOREIGN KEY (parent_room_id) REFERENCES rooms(id)
-  );
-`;
+function createRoomDatabase() {
+  if (!SQL) {
+    throw new Error('SQL.js not initialized');
+  }
+  
+  const db = new SQL.Database();
+  
+  // Execute schema creation
+  db.exec(ROOM_DATABASE_SCHEMA);
+  
+  return db;
+}
 
 /**
- * Room database class
+ * Load SQLite database from file data
+ * @param {Uint8Array} data - Database file data
+ * @returns {Object} SQL.js database instance
  */
-export class RoomDatabase {
-  constructor() {
+function loadRoomDatabase(data) {
+  if (!SQL) {
+    throw new Error('SQL.js not initialized');
+  }
+  
+  return new SQL.Database(data);
+}
+
+/**
+ * Room Database Manager Class
+ */
+export class RoomDatabaseManager {
+  constructor(roomId, directoryHandle) {
+    this.roomId = roomId;
+    this.directoryHandle = directoryHandle;
     this.db = null;
+    this.roomFolderHandle = null;
     this.isInitialized = false;
   }
 
   /**
-   * Initialize the database
-   * @param {Uint8Array} existingData - Existing database data (optional)
+   * Initialize the room database (create .room folder and database)
+   * @returns {Promise<void>}
    */
-  async initialize(existingData = null) {
-    await initSQL();
-    
-    if (existingData) {
-      this.db = new SQL.Database(existingData);
-    } else {
-      this.db = new SQL.Database();
-      // Create schema for new database
-      this.db.exec(DATABASE_SCHEMA);
-    }
-    
-    this.isInitialized = true;
-  }
+  async initialize() {
+    if (this.isInitialized) return;
 
-  /**
-   * Export database as Uint8Array for saving to filesystem
-   */
-  export() {
-    if (!this.db) throw new Error('Database not initialized');
-    return this.db.export();
-  }
-
-  /**
-   * Execute a query
-   * @param {string} query - SQL query
-   * @param {Array} params - Query parameters
-   */
-  query(query, params = []) {
-    if (!this.db) throw new Error('Database not initialized');
-    
     try {
-      const stmt = this.db.prepare(query);
-      const results = [];
+      await initializeSQL();
       
-      while (stmt.step()) {
-        results.push(stmt.getAsObject());
+      // Create or get .room folder
+      this.roomFolderHandle = await this.directoryHandle.getDirectoryHandle('.room', { create: true });
+      
+      // Try to load existing database
+      try {
+        const dbFileHandle = await this.roomFolderHandle.getFileHandle('room.db');
+        const dbFile = await dbFileHandle.getFile();
+        const dbData = new Uint8Array(await dbFile.arrayBuffer());
+        this.db = loadRoomDatabase(dbData);
+        console.log(`Loaded existing database for room ${this.roomId}`);
+        
+        // Ensure all required tables exist (migration)
+        await this.ensureTablesExist();
+      } catch (error) {
+        // Database doesn't exist, create new one
+        this.db = createRoomDatabase();
+        await this.saveDatabase();
+        console.log(`Created new database for room ${this.roomId}`);
       }
-      
-      stmt.free();
-      return results;
+
+      this.isInitialized = true;
+      await this.logActivity('database_initialized', 'Room database initialized');
+
     } catch (error) {
-      console.error('Database query error:', error);
+      console.error('Failed to initialize room database:', error);
       throw error;
     }
   }
 
   /**
-   * Execute a query that doesn't return results (INSERT, UPDATE, DELETE)
-   * @param {string} query - SQL query
-   * @param {Array} params - Query parameters
+   * Ensure all required tables exist in the database (migration)
+   * @returns {Promise<void>}
    */
-  exec(query, params = []) {
-    if (!this.db) throw new Error('Database not initialized');
-    
+  async ensureTablesExist() {
+    if (!this.db) return;
+
     try {
-      const stmt = this.db.prepare(query);
-      stmt.run(params);
-      stmt.free();
-      return true;
+      // Check if comments table exists
+      const result = this.db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='comments'");
+      
+      if (result.length === 0) {
+        // Comments table doesn't exist, create it
+        console.log(`Creating missing comments table for room ${this.roomId}`);
+        
+        const commentsTableSQL = `
+          CREATE TABLE IF NOT EXISTS comments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            file_id TEXT NOT NULL,
+            timestamp REAL DEFAULT 0,
+            content TEXT NOT NULL,
+            author_name TEXT DEFAULT 'User',
+            author_avatar TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (file_id) REFERENCES files(file_id)
+          );
+        `;
+        
+        this.db.exec(commentsTableSQL);
+        await this.saveDatabase();
+        console.log(`Comments table created for room ${this.roomId}`);
+      }
     } catch (error) {
-      console.error('Database exec error:', error);
+      console.error('Error ensuring tables exist:', error);
+    }
+  }
+
+  /**
+   * Save database to .room/room.db file
+   * @returns {Promise<void>}
+   */
+  async saveDatabase() {
+    if (!this.db || !this.roomFolderHandle) return;
+
+    try {
+      const dbData = this.db.export();
+      const dbFileHandle = await this.roomFolderHandle.getFileHandle('room.db', { create: true });
+      const writable = await dbFileHandle.createWritable();
+      await writable.write(dbData);
+      await writable.close();
+      
+      console.log(`Database saved for room ${this.roomId}`);
+    } catch (error) {
+      console.error('Failed to save database:', error);
       throw error;
     }
   }
 
-  // Room management methods
+  /**
+   * Initialize room metadata
+   * @param {Object} roomData - Room data object
+   * @returns {Promise<void>}
+   */
+  async initializeRoomMetadata(roomData) {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`
+      INSERT OR REPLACE INTO room_metadata (
+        room_id, name, description, directory_path, created_at, updated_at,
+        is_active, total_files, total_size, has_video, has_images, has_audio, has_documents
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run([
+      this.roomId,
+      roomData.title || roomData.name,
+      roomData.description || '',
+      roomData.directoryHandle?.name || '',
+      new Date().toISOString(),
+      new Date().toISOString(),
+      1, // Always start as active
+      roomData.totalFiles || 0,
+      roomData.totalSize || 0,
+      roomData.hasVideo ? 1 : 0,
+      roomData.hasImages ? 1 : 0,
+      roomData.hasAudio ? 1 : 0,
+      roomData.hasDocuments ? 1 : 0
+    ]);
+
+    stmt.free();
+    await this.saveDatabase();
+    await this.logActivity('room_metadata_initialized', 'Room metadata created');
+  }
+
+  /**
+   * Store file metadata in database
+   * @param {Object} file - File metadata object
+   * @returns {Promise<void>}
+   */
+  async storeFileMetadata(file) {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`
+      INSERT OR REPLACE INTO files (
+        file_id, name, path, full_path, size, type, category, extension,
+        last_modified, thumbnail_path, duration, width, height, metadata_json, analysis_complete
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run([
+      file.id,
+      file.name,
+      file.path || '',
+      file.fullPath || file.name,
+      file.size || 0,
+      file.type || file.mimetype,
+      file.category,
+      file.extension,
+      file.lastModified || Date.now(),
+      file.thumbnailPath || null,
+      file.duration || null,
+      file.width || null,
+      file.height || null,
+      JSON.stringify(file.metadata || {}),
+      file.analysisComplete ? 1 : 0
+    ]);
+
+    stmt.free();
+  }
+
+  /**
+   * Store thumbnail file to .room/thumbnails/ folder
+   * @param {string} fileId - File ID
+   * @param {Blob} thumbnailBlob - Thumbnail image blob
+   * @returns {Promise<string>} Path to stored thumbnail
+   */
+  async storeThumbnail(fileId, thumbnailBlob) {
+    if (!this.roomFolderHandle) throw new Error('Room folder not initialized');
+
+    try {
+      // Create thumbnails subdirectory
+      const thumbnailsHandle = await this.roomFolderHandle.getDirectoryHandle('thumbnails', { create: true });
+      
+      // Generate thumbnail filename
+      const thumbnailFilename = `${fileId}.webp`;
+      const thumbnailFileHandle = await thumbnailsHandle.getFileHandle(thumbnailFilename, { create: true });
+      
+      // Write thumbnail data
+      const writable = await thumbnailFileHandle.createWritable();
+      await writable.write(thumbnailBlob);
+      await writable.close();
+      
+      const thumbnailPath = `thumbnails/${thumbnailFilename}`;
+      console.log(`Thumbnail stored: ${thumbnailPath}`);
+      return thumbnailPath;
+      
+    } catch (error) {
+      console.error('Failed to store thumbnail:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get room active status
+   * @returns {Promise<boolean>}
+   */
+  async getRoomActiveStatus() {
+    if (!this.db) return true; // Default to active
+
+    const stmt = this.db.prepare('SELECT is_active FROM room_metadata WHERE room_id = ?');
+    const result = stmt.get([this.roomId]);
+    stmt.free();
+    
+    return result ? Boolean(result.is_active) : true;
+  }
+
+  /**
+   * Set room active status
+   * @param {boolean} isActive - Active status
+   * @returns {Promise<void>}
+   */
+  async setRoomActiveStatus(isActive) {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`
+      UPDATE room_metadata 
+      SET is_active = ?, updated_at = ?
+      WHERE room_id = ?
+    `);
+
+    stmt.run([isActive ? 1 : 0, new Date().toISOString(), this.roomId]);
+    stmt.free();
+    
+    await this.saveDatabase();
+    await this.logActivity('status_changed', `Room ${isActive ? 'activated' : 'deactivated'}`);
+  }
+
+  /**
+   * Get all files from database
+   * @returns {Promise<Array>} Array of file objects
+   */
+  async getAllFiles() {
+    if (!this.db) return [];
+
+    const stmt = this.db.prepare('SELECT * FROM files ORDER BY full_path');
+    const files = [];
+    
+    while (stmt.step()) {
+      const row = stmt.getAsObject();
+      files.push({
+        id: row.file_id,
+        name: row.name,
+        path: row.path,
+        fullPath: row.full_path,
+        size: row.size,
+        type: row.type,
+        category: row.category,
+        extension: row.extension,
+        lastModified: row.last_modified,
+        thumbnailPath: row.thumbnail_path,
+        duration: row.duration,
+        width: row.width,
+        height: row.height,
+        metadata: row.metadata_json ? JSON.parse(row.metadata_json) : {},
+        analysisComplete: Boolean(row.analysis_complete)
+      });
+    }
+    
+    stmt.free();
+    return files;
+  }
+
+  /**
+   * Update room statistics
+   * @param {Object} stats - Room statistics
+   * @returns {Promise<void>}
+   */
+  async updateRoomStats(stats) {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const stmt = this.db.prepare(`
+      UPDATE room_metadata 
+      SET total_files = ?, total_size = ?, has_video = ?, has_images = ?, 
+          has_audio = ?, has_documents = ?, updated_at = ?
+      WHERE room_id = ?
+    `);
+
+    stmt.run([
+      stats.totalFiles || 0,
+      stats.totalSize || 0,
+      stats.hasVideo ? 1 : 0,
+      stats.hasImages ? 1 : 0,
+      stats.hasAudio ? 1 : 0,
+      stats.hasDocuments ? 1 : 0,
+      new Date().toISOString(),
+      this.roomId
+    ]);
+
+    stmt.free();
+    await this.saveDatabase();
+  }
+
+  /**
+   * Log activity
+   * @param {string} action - Action name
+   * @param {string} details - Action details
+   * @returns {Promise<void>}
+   */
+  async logActivity(action, details) {
+    if (!this.db) return;
+
+    const stmt = this.db.prepare(`
+      INSERT INTO activity_log (room_id, action, details, timestamp)
+      VALUES (?, ?, ?, ?)
+    `);
+
+    stmt.run([this.roomId, action, details, new Date().toISOString()]);
+    stmt.free();
+    
+    // Don't save database for every log entry to avoid performance issues
+  }
+
+  /**
+   * Wipe all data and re-index
+   * @returns {Promise<void>}
+   */
+  async wipeAndReindex() {
+    if (!this.db) throw new Error('Database not initialized');
+
+    // Clear all data tables
+    this.db.exec(`
+      DELETE FROM files;
+      DELETE FROM folders;
+      DELETE FROM activity_log;
+      UPDATE room_metadata SET 
+        total_files = 0, total_size = 0, 
+        has_video = 0, has_images = 0, has_audio = 0, has_documents = 0,
+        updated_at = '${new Date().toISOString()}',
+        index_version = index_version + 1;
+    `);
+
+    // Remove thumbnail files
+    try {
+      const thumbnailsHandle = await this.roomFolderHandle.getDirectoryHandle('thumbnails');
+      for await (const [name, fileHandle] of thumbnailsHandle.entries()) {
+        if (fileHandle.kind === 'file') {
+          await thumbnailsHandle.removeEntry(name);
+        }
+      }
+    } catch (error) {
+      // Thumbnails folder might not exist
+      console.log('No thumbnails to clean up');
+    }
+
+    await this.saveDatabase();
+    await this.logActivity('wiped_reindexed', 'All data wiped for re-indexing');
+    
+    console.log(`Room ${this.roomId} wiped and ready for re-indexing`);
+  }
+
+  /**
+   * Add a comment to a file
+   * @param {string} fileId - File ID
+   * @param {Object} comment - Comment data
+   * @returns {Promise<number>} Comment ID
+   */
+  async addComment(fileId, comment) {
+    if (!this.db) await this.initialize();
+    
+    const sql = `
+      INSERT INTO comments (file_id, timestamp, content, author_name, author_avatar)
+      VALUES (?, ?, ?, ?, ?)
+    `;
+    
+    const result = this.db.run(sql, [
+      fileId,
+      comment.timestamp || 0,
+      comment.content,
+      comment.author?.name || 'User',
+      comment.author?.avatar || null
+    ]);
+    
+    await this.saveDatabase();
+    console.log(`Comment added to file ${fileId}`);
+    
+    // Return the inserted comment ID
+    const idResult = this.db.exec('SELECT last_insert_rowid() as id');
+    return idResult[0]?.values[0][0];
+  }
   
   /**
-   * Create a new room
-   * @param {Object} roomData - Room configuration
-   */
-  createRoom(roomData) {
-    const { id, name, path, parentRoomId = null, config = {} } = roomData;
-    
-    return this.exec(
-      `INSERT INTO rooms (id, name, path, parent_room_id, config, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-      [id, name, path, parentRoomId, JSON.stringify(config)]
-    );
-  }
-
-  /**
-   * Get room by ID
-   * @param {string} roomId - Room ID
-   */
-  getRoom(roomId) {
-    const results = this.query(
-      'SELECT * FROM rooms WHERE id = ?',
-      [roomId]
-    );
-    
-    if (results.length > 0) {
-      const room = results[0];
-      room.config = JSON.parse(room.config || '{}');
-      return room;
-    }
-    
-    return null;
-  }
-
-  /**
-   * Get all rooms
-   */
-  getAllRooms() {
-    const results = this.query(
-      'SELECT * FROM rooms ORDER BY created_at DESC'
-    );
-    
-    return results.map(room => {
-      room.config = JSON.parse(room.config || '{}');
-      return room;
-    });
-  }
-
-  /**
-   * Update room configuration
-   * @param {string} roomId - Room ID
-   * @param {Object} updates - Updates to apply
-   */
-  updateRoom(roomId, updates) {
-    const fields = [];
-    const values = [];
-    
-    Object.keys(updates).forEach(key => {
-      if (key === 'config') {
-        fields.push('config = ?');
-        values.push(JSON.stringify(updates[key]));
-      } else {
-        fields.push(`${key} = ?`);
-        values.push(updates[key]);
-      }
-    });
-    
-    fields.push('updated_at = datetime(\'now\')');
-    values.push(roomId);
-    
-    return this.exec(
-      `UPDATE rooms SET ${fields.join(', ')} WHERE id = ?`,
-      values
-    );
-  }
-
-  /**
-   * Delete a room
-   * @param {string} roomId - Room ID
-   */
-  deleteRoom(roomId) {
-    return this.exec('DELETE FROM rooms WHERE id = ?', [roomId]);
-  }
-
-  // File management methods
-
-  /**
-   * Add file to room
-   * @param {Object} fileData - File metadata
-   */
-  addFile(fileData) {
-    const { id, roomId, name, path, type, format, size, checksum, metadata = {}, handlerId = null } = fileData;
-    
-    return this.exec(
-      `INSERT INTO files (id, room_id, name, path, type, format, size, checksum, metadata, handler_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-      [id, roomId, name, path, type, format, size, checksum, JSON.stringify(metadata), handlerId]
-    );
-  }
-
-  /**
-   * Get files for a room
-   * @param {string} roomId - Room ID
-   */
-  getRoomFiles(roomId) {
-    const results = this.query(
-      'SELECT * FROM files WHERE room_id = ? ORDER BY name',
-      [roomId]
-    );
-    
-    return results.map(file => {
-      file.metadata = JSON.parse(file.metadata || '{}');
-      return file;
-    });
-  }
-
-  /**
-   * Update file metadata
+   * Get comments for a file
    * @param {string} fileId - File ID
-   * @param {Object} updates - Updates to apply
+   * @returns {Promise<Array>} Array of comments
    */
-  updateFile(fileId, updates) {
-    const fields = [];
-    const values = [];
+  async getComments(fileId) {
+    if (!this.db) await this.initialize();
     
-    Object.keys(updates).forEach(key => {
-      if (key === 'metadata') {
-        fields.push('metadata = ?');
-        values.push(JSON.stringify(updates[key]));
-      } else {
-        fields.push(`${key} = ?`);
-        values.push(updates[key]);
-      }
-    });
+    const sql = `
+      SELECT id, timestamp, content, author_name, author_avatar, created_at
+      FROM comments
+      WHERE file_id = ?
+      ORDER BY timestamp ASC
+    `;
     
-    fields.push('updated_at = datetime(\'now\')');
-    values.push(fileId);
+    const result = this.db.exec(sql, [fileId]);
     
-    return this.exec(
-      `UPDATE files SET ${fields.join(', ')} WHERE id = ?`,
-      values
-    );
+    if (result.length === 0) return [];
+    
+    return result[0].values.map(row => ({
+      id: row[0],
+      timestamp: row[1],
+      content: row[2],
+      author: {
+        name: row[3],
+        avatar: row[4]
+      },
+      createdAt: row[5]
+    }));
   }
-
-  // Handler management methods
-
+  
   /**
-   * Create a file format handler
-   * @param {Object} handlerData - Handler configuration
+   * Delete a comment
+   * @param {number} commentId - Comment ID
+   * @returns {Promise<boolean>} Success status
    */
-  createHandler(handlerData) {
-    const { id, name, description, fileExtensions, componentName, ingestScript, config = {} } = handlerData;
+  async deleteComment(commentId) {
+    if (!this.db) await this.initialize();
     
-    return this.exec(
-      `INSERT INTO handlers (id, name, description, file_extensions, component_name, ingest_script, config, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-      [id, name, description, JSON.stringify(fileExtensions), componentName, ingestScript, JSON.stringify(config)]
-    );
-  }
-
-  /**
-   * Get all handlers
-   */
-  getAllHandlers() {
-    const results = this.query(
-      'SELECT * FROM handlers ORDER BY name'
-    );
+    const sql = 'DELETE FROM comments WHERE id = ?';
+    this.db.run(sql, [commentId]);
+    await this.saveDatabase();
     
-    return results.map(handler => {
-      handler.file_extensions = JSON.parse(handler.file_extensions || '[]');
-      handler.config = JSON.parse(handler.config || '{}');
-      return handler;
-    });
+    console.log(`Comment ${commentId} deleted`);
+    return true;
   }
 
   /**
-   * Get handler by file extension
-   * @param {string} extension - File extension
+   * Close database connection
    */
-  getHandlerByExtension(extension) {
-    const handlers = this.getAllHandlers();
-    return handlers.find(handler => 
-      handler.file_extensions.includes(extension.toLowerCase())
-    );
-  }
-
-  // Component management methods
-
-  /**
-   * Create a custom component
-   * @param {Object} componentData - Component data
-   */
-  createComponent(componentData) {
-    const { id, name, description, componentCode, propsSchema = {} } = componentData;
-    
-    return this.exec(
-      `INSERT INTO components (id, name, description, component_code, props_schema, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-      [id, name, description, componentCode, JSON.stringify(propsSchema)]
-    );
-  }
-
-  /**
-   * Get all components
-   */
-  getAllComponents() {
-    const results = this.query(
-      'SELECT * FROM components ORDER BY name'
-    );
-    
-    return results.map(component => {
-      component.props_schema = JSON.parse(component.props_schema || '{}');
-      return component;
-    });
-  }
-
-  // Room hierarchy methods
-
-  /**
-   * Set room hierarchy relationship
-   * @param {string} roomId - Room ID
-   * @param {string} parentRoomId - Parent room ID
-   * @param {number} pathDepth - Depth in hierarchy
-   * @param {boolean} isManaged - Whether this room is managed by parent
-   */
-  setRoomHierarchy(roomId, parentRoomId, pathDepth, isManaged = true) {
-    // Remove existing hierarchy entry
-    this.exec('DELETE FROM room_hierarchy WHERE room_id = ?', [roomId]);
-    
-    // Add new hierarchy entry
-    return this.exec(
-      `INSERT INTO room_hierarchy (id, room_id, parent_room_id, path_depth, is_managed, created_at)
-       VALUES (?, ?, ?, ?, ?, datetime('now'))`,
-      [`${roomId}-hierarchy`, roomId, parentRoomId, pathDepth, isManaged]
-    );
-  }
-
-  /**
-   * Get room hierarchy
-   * @param {string} roomId - Room ID
-   */
-  getRoomHierarchy(roomId) {
-    return this.query(
-      `SELECT rh.*, r.name as room_name, pr.name as parent_name
-       FROM room_hierarchy rh
-       LEFT JOIN rooms r ON r.id = rh.room_id
-       LEFT JOIN rooms pr ON pr.id = rh.parent_room_id
-       WHERE rh.room_id = ?`,
-      [roomId]
-    );
-  }
-
-  /**
-   * Get child rooms
-   * @param {string} parentRoomId - Parent room ID
-   */
-  getChildRooms(parentRoomId) {
-    return this.query(
-      `SELECT r.*, rh.is_managed, rh.path_depth
-       FROM rooms r
-       LEFT JOIN room_hierarchy rh ON r.id = rh.room_id
-       WHERE rh.parent_room_id = ?
-       ORDER BY rh.path_depth, r.name`,
-      [parentRoomId]
-    );
+  close() {
+    if (this.db) {
+      this.db.close();
+      this.db = null;
+    }
+    this.isInitialized = false;
   }
 }
 
 /**
- * Default room configuration
+ * Initialize SQL.js on module load
  */
-export const DEFAULT_ROOM_CONFIG = {
-  version: "1.0.0",
-  features: {
-    fileManagement: true,
-    customHandlers: true,
-    customComponents: true,
-    ingestScripts: true
-  },
-  ui: {
-    theme: "default",
-    layout: "grid",
-    showHidden: false
-  },
-  security: {
-    allowCustomScripts: true,
-    sandboxMode: false
-  }
-};
+export const initializeRoomDatabase = initializeSQL;
 
-/**
- * Default file format handlers
- */
-export const DEFAULT_HANDLERS = [
-  {
-    id: "image-handler",
-    name: "Image Handler",
-    description: "Handles common image formats",
-    fileExtensions: [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"],
-    componentName: "ImageViewer",
-    ingestScript: "image-ingest.js",
-    config: {
-      generateThumbnails: true,
-      maxThumbnailSize: 300,
-      extractMetadata: true
-    }
-  },
-  {
-    id: "video-handler",
-    name: "Video Handler", 
-    description: "Handles video files with preview generation",
-    fileExtensions: [".mp4", ".webm", ".ogg", ".avi", ".mov", ".wmv"],
-    componentName: "VideoPlayer",
-    ingestScript: "video-ingest.js",
-    config: {
-      generateThumbnails: true,
-      generateSpriteSheets: true,
-      extractMetadata: true
-    }
-  },
-  {
-    id: "audio-handler",
-    name: "Audio Handler",
-    description: "Handles audio files with waveform generation",
-    fileExtensions: [".mp3", ".wav", ".ogg", ".aac", ".flac"],
-    componentName: "AudioPlayer",
-    ingestScript: "audio-ingest.js",
-    config: {
-      generateWaveforms: true,
-      extractMetadata: true
-    }
-  },
-  {
-    id: "document-handler",
-    name: "Document Handler",
-    description: "Handles document files",
-    fileExtensions: [".pdf", ".doc", ".docx", ".txt", ".rtf"],
-    componentName: "DocumentViewer",
-    ingestScript: "document-ingest.js",
-    config: {
-      extractText: true,
-      generateThumbnails: true
-    }
-  }
-];
-
-export default RoomDatabase;
+export default RoomDatabaseManager;

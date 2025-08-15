@@ -24,11 +24,21 @@ This document outlines the development roadmap for the Rooms Vue application, in
 - ✅ File System Access API utility module with directory picker and file scanning
 - ✅ Media processing utilities for thumbnail generation and metadata extraction
 - ✅ Room service for managing file system handles and room data
-- ✅ Integration with SpacesView.vue for creating rooms from local folders
+- ✅ Integration with SpacesView.vue (now RoomsView) for creating rooms from local folders
 - ✅ FileSystemRoomView component for displaying folder contents
 - ✅ Support for images, videos, audio, documents with proper thumbnails
 - ✅ Real-time thumbnail generation and media metadata extraction
 - ✅ Permission handling and error states for file system access
+
+### 3.1. URL State Management and Routing Restructure (NEW)
+- ✅ Reorganized routing structure from `/spaces` to `/files/rooms/`
+- ✅ Implemented nested route support for room, folder, and file navigation
+- ✅ Added URL parameter synchronization for complete UI state sharing
+- ✅ Redirects from legacy URLs to new structure for backward compatibility
+- ✅ Navigation reordering with Spaces moved to first position in menu
+- ✅ Root path redirect from `/` to `/files/rooms/`
+- ✅ URL sharing functionality for rooms, folders, and file selections
+- ✅ Browser back/forward navigation support with Vue Router
 
 ## Upcoming Features
 
@@ -54,13 +64,14 @@ This document outlines the development roadmap for the Rooms Vue application, in
 
 ### Frontend (Vue.js)
 - Vue 3 with Composition API
-- Vue Router for navigation
+- Vue Router for navigation with nested routes and URL state management
 - D3.js for data visualizations
 - FontAwesome icons
 - Vite build system
 - File System Access API for local folder access
 - Canvas API for thumbnail generation
 - HTML5 Media APIs for video/audio processing
+- Reactive URL synchronization for UI state sharing
 
 ### Database (Neo4j)
 - Docker-based Neo4j 5.15 deployment

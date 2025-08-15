@@ -1,5 +1,5 @@
 <template>
-  <div class="spaces-view" @click="handleBackgroundClick">
+  <div class="rooms-view" @click="handleBackgroundClick">
     <!-- Secondary tabs navigation -->
     <div class="secondary-nav">
       <div class="tab-container">
@@ -8,14 +8,14 @@
         <div class="tab">Templates</div>
         <div class="tab">Snapshots</div>
         <div class="tab">Libraries</div>
-        <div class="tab active" @click.stop="deselectRoom">Rooms</div>
+        <div class="tab active" @click.stop="deselectRoom">Files</div>
       </div>
     </div>
     
     <!-- Main content with grey backdrop -->
     <div class="main-container">
       <!-- Left Sidebar (Rooms list) -->
-      <div class="spaces-sidebar">
+      <div class="rooms-sidebar">
         <div class="sidebar-header">
           <h3>Rooms</h3>
           <div class="header-actions">
@@ -67,8 +67,14 @@
                     :style="{ color: '#dc2626' }"
                   />
                   <font-awesome-icon 
+                    v-else-if="room.status === 'permission_needed'"
+                    :icon="['fas', 'lock']"
+                    :style="{ color: '#f59e0b' }"
+                    :title="'Permission required for ' + room.title"
+                  />
+                  <font-awesome-icon 
                     v-else
-                    :icon="['fas', room.type === 'filesystem' ? 'folder' : (room.isActive ? 'door-open' : 'door-closed')]" 
+                    :icon="['fas', room.isActive ? 'door-open' : 'door-closed']" 
                     :style="{ color: room.isActive ? '#3c5a9b' : '#626262' }" 
                   />
                 </div>
@@ -80,6 +86,9 @@
                     </span>
                     <span v-else-if="room.status === 'error'" class="status-error">
                       {{ room.loadingMessage || 'Error loading' }}
+                    </span>
+                    <span v-else-if="room.status === 'permission_needed'" class="status-warning">
+                      Permission required - click to grant access
                     </span>
                     <span v-else>
                       {{ room.itemCount }} files • {{ room.size }}
@@ -107,9 +116,17 @@
                       <font-awesome-icon :icon="['fas', 'cog']" />
                       <span>Settings</span>
                     </li>
+                    <li class="context-menu-item" @click="toggleRoomActiveStatus(room)">
+                      <font-awesome-icon :icon="['fas', room.isActive ? 'door-closed' : 'door-open']" />
+                      <span>{{ room.isActive ? 'Deactivate' : 'Activate' }} Room</span>
+                    </li>
                     <li class="context-menu-item" @click="refreshRoom(room)">
                       <font-awesome-icon :icon="['fas', 'sync-alt']" />
                       <span>Refresh</span>
+                    </li>
+                    <li class="context-menu-item warning" @click="wipeAndReindexRoom(room)">
+                      <font-awesome-icon :icon="['fas', 'database']" />
+                      <span>Wipe & Re-index</span>
                     </li>
                     <li class="context-menu-divider"></li>
                     <li class="context-menu-item danger" @click="removeRoom(room)">
@@ -193,7 +210,7 @@
                 <div class="room-card-header">
                   <div class="room-icon">
                     <font-awesome-icon 
-                      :icon="['fas', room.type === 'filesystem' ? 'folder' : (room.isActive ? 'door-open' : 'door-closed')]" 
+                      :icon="['fas', room.isActive ? 'door-open' : 'door-closed']" 
                       :style="{ color: room.isActive ? '#3c5a9b' : '#626262' }" 
                     />
                   </div>
@@ -225,7 +242,7 @@
               >
                 <div class="room-list-icon">
                   <font-awesome-icon 
-                    :icon="['fas', room.type === 'filesystem' ? 'folder' : (room.isActive ? 'door-open' : 'door-closed')]" 
+                    :icon="['fas', room.isActive ? 'door-open' : 'door-closed']" 
                     :style="{ color: room.isActive ? '#3c5a9b' : '#626262' }" 
                   />
                 </div>
@@ -279,7 +296,7 @@
           </div>
 
           <!-- Static demo rooms -->
-          <EmbeddedCollectionView 
+          <EmbeddedRoomView 
             v-if="selectedRoom === 'nab-2025-demo'" 
             :collectionId="'nab-demo'"
             class="embedded-view" 
@@ -288,14 +305,16 @@
           <RoomView v-else-if="selectedRoom === 'demo-room'" class="embedded-view" @click.stop />
           
           <!-- Filesystem rooms -->
-          <FileSystemCollectionAdapter 
+          <FileSystemRoomAdapter 
             v-else-if="getRoomById(selectedRoom)?.type === 'filesystem'" 
             :roomId="selectedRoom" 
-            :currentFolderPath="currentFolderPath" 
+            :currentFolderPath="currentFolderPath"
+            :selectedFileId="selectedFile?.id || route.query.file"
             class="embedded-view"
             @click.stop
             @folder-selected="handleFolderSelected"
             @folder-settings="handleFolderSettings"
+            @item-selected="handleItemSelected"
           />
           
           <!-- Fallback for unknown room types -->
@@ -304,6 +323,7 @@
             <p>The selected room could not be loaded.</p>
             <button @click="deselectRoom" class="btn-primary">Back to Rooms</button>
           </div>
+          
         </div>
       </div>
     </div>
@@ -319,31 +339,33 @@
 </template>
 
 <script>
-import { ref, computed, onMounted } from 'vue';
-import CollectionView from './CollectionView.vue';
+import { ref, computed, onMounted, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import RoomView from './RoomView.vue';
 import FileSystemRoomView from './FileSystemRoomView.vue';
-import EmbeddedCollectionView from '../components/EmbeddedCollectionView.vue';
+import EmbeddedRoomView from '../components/EmbeddedRoomView.vue';
 import EmbeddedFileSystemRoomView from '../components/EmbeddedFileSystemRoomView.vue';
-import FileSystemCollectionAdapter from '../components/FileSystemCollectionAdapter.vue';
+import FileSystemRoomAdapter from '../components/FileSystemRoomAdapter.vue';
 import TreeNode from '../components/TreeNode.vue';
 import RoomSettingsWizard from '../components/RoomSettingsWizard.vue';
 import { roomService } from '../services/roomService.js';
 import { isFileSystemAccessSupported } from '../utils/fileSystemAccess.js';
 
 export default {
-  name: 'SpacesView',
+  name: 'RoomsView',
   components: {
-    CollectionView,
     RoomView,
     FileSystemRoomView,
-    EmbeddedCollectionView,
+    EmbeddedRoomView,
     EmbeddedFileSystemRoomView,
-    FileSystemCollectionAdapter,
+    FileSystemRoomAdapter,
     TreeNode,
     RoomSettingsWizard
   },
   setup() {
+    const route = useRoute();
+    const router = useRouter();
+    
     const selectedRoom = ref(null);
     const viewMode = ref('grid');
     const showInactiveRooms = ref(true);
@@ -352,6 +374,7 @@ export default {
     const createRoomProgress = ref(null);
     const showFileTree = ref(true);
     const selectedFile = ref(null);
+    const selectedVideoData = ref(null); // Store video data for inline playback
     const currentFolderPath = ref(null); // New state for current folder path
     
     // Context menu state
@@ -379,7 +402,7 @@ export default {
       const fileSystemRooms = roomService.getAllRooms().map(room => ({
         id: room.id,
         name: room.title,
-        isActive: room.status === 'ready' || room.status === 'active',
+        isActive: room.isActive !== undefined ? room.isActive : (room.status === 'ready' || room.status === 'active'),
         itemCount: room.totalFiles,
         hasVideo: room.hasVideo,
         size: room.totalSize,
@@ -419,15 +442,28 @@ export default {
       return selectedRoomData.value?.name || '';
     });
 
-    const selectedRoomFiles = computed(() => {
+    const selectedRoomFiles = ref([]);
+    const isLoadingFiles = ref(false);
+    
+    // Function to load files for selected room
+    const loadSelectedRoomFiles = async () => {
       const roomData = selectedRoomData.value;
       if (!roomData || roomData.type !== 'filesystem') {
-        return [];
+        selectedRoomFiles.value = [];
+        return;
       }
       
-      const room = roomService.getRoom(selectedRoom.value);
-      return room?.files || [];
-    });
+      isLoadingFiles.value = true;
+      try {
+        const files = await roomService.getLiveRoomFiles(selectedRoom.value);
+        selectedRoomFiles.value = files;
+      } catch (error) {
+        console.error('Error loading room files:', error);
+        selectedRoomFiles.value = [];
+      } finally {
+        isLoadingFiles.value = false;
+      }
+    };
 
     const folderTree = computed(() => {
       const files = selectedRoomFiles.value;
@@ -453,6 +489,140 @@ export default {
       left: `${contextMenu.value.x}px`,
       zIndex: 1000
     }));
+
+    // URL State Management
+    const updateUrlFromState = () => {
+      const params = { roomId: selectedRoom.value };
+      const query = {};
+      
+      // Add folder path if present
+      if (currentFolderPath.value) {
+        params.folderPath = currentFolderPath.value;
+      }
+      
+      // Add file selection to query
+      if (selectedFile.value) {
+        query.file = typeof selectedFile.value === 'string' ? selectedFile.value : (selectedFile.value.id || selectedFile.value.name);
+      }
+      
+      // Determine the correct route name
+      let routeName = 'spaces';
+      if (selectedRoom.value) {
+        routeName = currentFolderPath.value ? 'spaces-folder' : 'spaces-room';
+      }
+      
+      // Only update if the URL would actually change
+      const currentParams = route.params;
+      const currentQuery = route.query;
+      const shouldUpdate = (
+        currentParams.roomId !== params.roomId ||
+        currentParams.folderPath !== params.folderPath ||
+        JSON.stringify(currentQuery) !== JSON.stringify(query)
+      );
+      
+      if (shouldUpdate || route.name !== routeName) {
+        router.replace({ name: routeName, params, query });
+      }
+    };
+
+    const loadStateFromUrl = async () => {
+      // Load room selection from URL
+      if (route.params.roomId) {
+        let room = roomService.getRoom(route.params.roomId);
+        
+        // If exact room not found, try to find by partial match (handle room ID changes)
+        if (!room) {
+          const allRooms = roomService.getAllRooms();
+          room = allRooms.find(r => 
+            r.id.includes(route.params.roomId) || 
+            route.params.roomId.includes(r.id) ||
+            (r.title && route.params.roomId.includes(r.title.toLowerCase().replace(/[^a-z0-9]/g, '-')))
+          );
+          
+          // If we found a matching room, update the URL to use the correct ID
+          if (room) {
+            console.log(`Room ID mismatch: URL has ${route.params.roomId}, found ${room.id}`);
+            router.replace({ 
+              name: route.name, 
+              params: { ...route.params, roomId: room.id }, 
+              query: route.query 
+            });
+          }
+        }
+        
+        if (room) {
+          if (room.status === 'permission_needed') {
+            // Room exists but needs permission - show prompt
+            await handleRoomPermissionRequest(room);
+          } else {
+            selectedRoom.value = room.id; // Use the actual room ID
+          }
+        } else {
+          // Room not found - might need to wait for initialization
+          console.warn(`Room ${route.params.roomId} not found`);
+          // Try again after a short delay to allow for initialization
+          setTimeout(() => {
+            let retryRoom = roomService.getRoom(route.params.roomId);
+            
+            // Try partial match again on retry
+            if (!retryRoom) {
+              const allRooms = roomService.getAllRooms();
+              retryRoom = allRooms.find(r => 
+                r.id.includes(route.params.roomId) || 
+                route.params.roomId.includes(r.id)
+              );
+            }
+            
+            if (retryRoom) {
+              if (retryRoom.status === 'permission_needed') {
+                handleRoomPermissionRequest(retryRoom);
+              } else {
+                selectedRoom.value = retryRoom.id;
+                // Update URL with correct room ID
+                router.replace({ 
+                  name: route.name, 
+                  params: { ...route.params, roomId: retryRoom.id }, 
+                  query: route.query 
+                });
+              }
+            }
+          }, 1000);
+        }
+      }
+      
+      // Load folder path from URL
+      if (route.params.folderPath) {
+        currentFolderPath.value = route.params.folderPath;
+      }
+      
+      // Load file selection from query
+      if (route.query.file) {
+        // We'll need to find the actual file object later
+        // For now, just store the file identifier
+        selectedFile.value = { id: route.query.file };
+      }
+    };
+
+    const handleRoomPermissionRequest = async (room) => {
+      // Show user-friendly prompt for permission
+      const userWantsAccess = confirm(
+        `This shared link requires access to the folder "${room.title}". ` +
+        'Would you like to grant permission to view this content?'
+      );
+      
+      if (userWantsAccess) {
+        const granted = await roomService.requestRoomPermission(room.id);
+        if (granted) {
+          selectedRoom.value = room.id;
+          // Refresh the room to load files
+          await roomService.refreshRoom(room.id);
+        } else {
+          alert('Permission was denied. Cannot access the shared content.');
+        }
+      } else {
+        console.log('User declined permission request');
+      }
+    };
 
     const buildFolderTree = (files) => {
       if (!files || files.length === 0) {
@@ -606,18 +776,38 @@ export default {
       }
     };
 
-    const selectRoom = (roomId) => {
+    const selectRoom = async (roomId) => {
+      const room = roomService.getRoom(roomId);
+      
+      if (room && room.status === 'permission_needed') {
+        // Room needs permission, request it
+        await handleRoomPermissionRequest(room);
+        return;
+      }
+      
       selectedRoom.value = roomId;
+      currentFolderPath.value = null; // Reset folder path when selecting different room
+      selectedFile.value = null; // Reset file selection
+      
+      // Load files for the selected room
+      await loadSelectedRoomFiles();
       
       // Update access time for filesystem rooms
-      const room = roomService.getRoom(roomId);
       if (room) {
         roomService.updateRoomAccess(roomId);
       }
+      
+      // Update URL
+      updateUrlFromState();
     };
 
     const deselectRoom = () => {
       selectedRoom.value = null;
+      currentFolderPath.value = null;
+      selectedFile.value = null;
+      
+      // Update URL
+      updateUrlFromState();
     };
 
     const handleBackgroundClick = (event) => {
@@ -687,6 +877,64 @@ export default {
     const handleFolderSelected = (folder) => {
       console.log('Folder selected in viewport:', folder);
       currentFolderPath.value = folder.path; // Set the current folder path
+      selectedFile.value = null; // Reset file selection when changing folders
+      
+      // Update URL
+      updateUrlFromState();
+    };
+    
+    const handleItemSelected = async (item) => {
+      console.log('INLINE VIDEO PLAYER - Item selected in viewport:', item);
+      
+      // PREVENT ALL NAVIGATION - stay on current page
+      console.log('Preventing navigation - keeping video inline');
+      
+      // Handle video files specifically
+      if (item.filetype === 'video' && item.fileHandle) {
+        console.log('Processing video file for INLINE playback only');
+        try {
+          // Create blob URL from file handle for video playback
+          const file = await item.fileHandle.getFile();
+          const videoUrl = URL.createObjectURL(file);
+          
+          // Create video playback data
+          const videoData = {
+            ...item,
+            src: videoUrl,
+            poster: item.thumbnail || null
+          };
+          
+          console.log('INLINE VIDEO PLAYER - Video data ready:', videoData);
+          
+          // Store video data for inline playback ONLY - NO NAVIGATION
+          selectedVideoData.value = videoData;
+          selectedFile.value = item.id;
+          
+        } catch (error) {
+          console.error('Error preparing video for playback:', error);
+        }
+      } else {
+        // For non-video files, clear video data
+        console.log('Non-video file selected, clearing video data');
+        selectedVideoData.value = null;
+        selectedFile.value = item.id;
+      }
+      
+      // Update URL to reflect selected file
+      updateUrlFromState();
+    };
+    
+    const closeVideoPlayer = () => {
+      if (selectedVideoData.value?.src) {
+        URL.revokeObjectURL(selectedVideoData.value.src);
+      }
+      selectedVideoData.value = null;
+      selectedFile.value = null;
+      updateUrlFromState();
+    };
+    
+    const onVideoLoaded = () => {
+      console.log('Video loaded successfully');
     };
 
     const navigateUpFolder = () => {
@@ -697,6 +945,10 @@ export default {
         } else {
           currentFolderPath.value = null; // Go to root of the room
         }
+        selectedFile.value = null; // Reset file selection when navigating
+        
+        // Update URL
+        updateUrlFromState();
       }
     };
 
@@ -705,6 +957,60 @@ export default {
       contextMenu.value.roomId = null;
       console.log('Refreshing room:', room.name);
       // TODO: Implement room refresh logic
+    };
+
+    const toggleRoomActiveStatus = async (room) => {
+      contextMenu.value.visible = false;
+      contextMenu.value.roomId = null;
+      
+      const newStatus = !room.isActive;
+      const action = newStatus ? 'activate' : 'deactivate';
+      
+      if (confirm(`Are you sure you want to ${action} "${room.name}"?`)) {
+        try {
+          const success = await roomService.setRoomActiveStatus(room.id, newStatus);
+          if (success) {
+            // Status updated successfully
+            console.log(`Room ${room.name} ${action}d successfully`);
+          } else {
+            alert(`Failed to ${action} room "${room.name}"`);
+          }
+        } catch (error) {
+          console.error(`Error ${action}ing room:`, error);
+          alert(`Error ${action}ing room: ${error.message}`);
+        }
+      }
+    };
+
+    const wipeAndReindexRoom = async (room) => {
+      contextMenu.value.visible = false;
+      contextMenu.value.roomId = null;
+      
+      const confirmMessage = `This will wipe ALL stored data for "${room.name}" including:\n` +
+                           `• Database records\n` +
+                           `• Thumbnails\n` +
+                           `• Analysis results\n\n` +
+                           `The room will be re-indexed with current features.\n\n` +
+                           `This action cannot be undone. Continue?`;
+      
+      if (confirm(confirmMessage)) {
+        try {
+          room.status = 'processing';
+          room.loadingMessage = 'Wiping and re-indexing...';
+          
+          await roomService.wipeAndReindexRoom(room.id, (progress) => {
+            console.log('Re-index progress:', progress.message);
+            room.loadingMessage = progress.message;
+          });
+          
+          console.log(`Room ${room.name} wiped and re-indexed successfully`);
+        } catch (error) {
+          console.error('Error wiping and re-indexing room:', error);
+          alert(`Error wiping room: ${error.message}`);
+          room.status = 'error';
+          room.loadingMessage = 'Error during wipe/re-index';
+        }
+      }
     };
 
     const removeRoom = (room) => {
@@ -773,11 +1079,48 @@ export default {
       return rooms.value.find(r => r.id === roomId) || null;
     };
 
-    // Validate filesystem room access on mount
+    // Initialize room service and validate access on mount
     onMounted(async () => {
+      // Initialize room service first (loads from IndexedDB)
+      await roomService.initializeRoomService();
+      
       const fileSystemRooms = roomService.getAllRooms();
       for (const room of fileSystemRooms) {
         await roomService.validateRoomAccess(room.id);
+      }
+      
+      // Load initial state from URL after initialization
+      await loadStateFromUrl();
+    });
+
+    // Watch for route changes to sync state
+    watch(() => route.params, () => {
+      loadStateFromUrl();
+    }, { deep: true });
+
+    watch(() => route.query, () => {
+      if (route.query.file && route.query.file !== selectedFile.value?.id) {
+        selectedFile.value = { id: route.query.file };
+      }
+    }, { deep: true });
+
+    // Watch for room selection changes to load files
+    watch(selectedRoom, async (newRoomId, oldRoomId) => {
+      if (newRoomId && newRoomId !== oldRoomId) {
+        await loadSelectedRoomFiles();
+        
+        // If room is still processing, set up a watcher to refresh when done
+        const room = roomService.getRoom(newRoomId);
+        if (room && (room.status === 'loading' || room.status === 'scanning' || room.status === 'processing')) {
+          console.log(`Room ${newRoomId} is processing, will refresh files when complete`);
+          const refreshWatcher = watch(() => room.status, async (newStatus) => {
+            if (newStatus === 'ready') {
+              console.log(`Room ${newRoomId} processing complete, refreshing files`);
+              await loadSelectedRoomFiles();
+              refreshWatcher(); // Stop watching
+            }
+          });
+        }
       }
     });
 
@@ -806,6 +1149,8 @@ export default {
       selectedRoomData,
       selectedRoomName,
       selectedRoomFiles,
+      isLoadingFiles,
+      loadSelectedRoomFiles,
       folderTree,
       toggleFileTree,
       selectFile,
@@ -820,6 +1165,8 @@ export default {
       toggleRoomMenu,
       openRoomSettings,
       refreshRoom,
+      toggleRoomActiveStatus,
+      wipeAndReindexRoom,
       removeRoom,
       // Settings modal
       settingsModal,
@@ -827,14 +1174,23 @@ export default {
       onTemplateApplied,
       handleFolderSettings,
       handleFolderSelected,
-      navigateUpFolder
+      handleItemSelected,
+      closeVideoPlayer,
+      onVideoLoaded,
+      selectedVideoData,
+      navigateUpFolder,
+      currentFolderPath,
+      // URL State Management
+      updateUrlFromState,
+      loadStateFromUrl,
+      handleRoomPermissionRequest
     };
   }
 }
 </script>
 
 <style scoped>
-.spaces-view {
+.rooms-view {
   display: flex;
   flex-direction: column;
   height: calc(100vh - 60px);
@@ -898,7 +1254,7 @@ export default {
 }
 
 /* Left sidebar styles */
-.spaces-sidebar {
+.rooms-sidebar {
   flex: 0 0 240px;
   background-color: #ffffff;
   border-radius: 8px;
@@ -1015,6 +1371,11 @@ export default {
 
 .status-error {
   color: #dc2626;
+}
+
+.status-warning {
+  color: #f59e0b;
+  font-weight: 500;
 }
 
 /* Inline folder tree styles */
@@ -1640,6 +2001,14 @@ export default {
   background-color: #fef2f2;
 }
 
+.context-menu-item.warning {
+  color: #d97706;
+}
+
+.context-menu-item.warning:hover {
+  background-color: #fef3c7;
+}
+
 .context-menu-divider {
   height: 1px;
   background-color: #e5e7eb;
@@ -1675,4 +2044,5 @@ export default {
   border-top-left-radius: 0 !important;
   border-top-right-radius: 0 !important;
 }
+
 </style> 

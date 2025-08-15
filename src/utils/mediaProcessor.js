@@ -247,6 +247,90 @@ export async function createAudioThumbnail(file, maxWidth = 600, maxHeight = 200
 }
 
 /**
+ * Create a thumbnail from a professional video file
+ * @param {File} file - The professional video file
+ * @param {number} seekTime - Time in seconds to capture frame (default: 1)
+ * @param {number} maxWidth - Maximum thumbnail width (default: 600)
+ * @param {number} maxHeight - Maximum thumbnail height (default: 400)
+ * @returns {Promise<Object>} Object with thumbnail data URL and professional metadata
+ */
+export async function createProfessionalVideoThumbnail(file, seekTime = 1, maxWidth = 600, maxHeight = 400) {
+  // For professional formats that browsers can't handle natively, create a specialized placeholder
+  const extension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+  const professionalFormats = ['.r3d', '.rdc', '.rdm', '.braw', '.arriraw', '.ari', '.dpx', '.exr', '.cin'];
+  
+  if (professionalFormats.includes(extension)) {
+    return createProfessionalVideoPlaceholder(file, extension, maxWidth, maxHeight);
+  }
+  
+  // For other professional formats that browsers might handle, try standard video processing
+  try {
+    return await createVideoThumbnail(file, seekTime, maxWidth, maxHeight);
+  } catch (error) {
+    return createProfessionalVideoPlaceholder(file, extension, maxWidth, maxHeight);
+  }
+}
+
+/**
+ * Create a specialized placeholder for professional video files
+ * @param {File} file - The professional video file
+ * @param {string} extension - File extension
+ * @param {number} width - Thumbnail width
+ * @param {number} height - Thumbnail height
+ * @returns {Promise<Object>} Object with thumbnail data URL
+ */
+async function createProfessionalVideoPlaceholder(file, extension, width = 600, height = 400) {
+  return new Promise((resolve) => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    canvas.width = width;
+    canvas.height = height;
+    
+    // Professional video background (darker, more cinematic)
+    const gradient = ctx.createLinearGradient(0, 0, 0, height);
+    gradient.addColorStop(0, '#1a1a2e');
+    gradient.addColorStop(1, '#16213e');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+    
+    // Professional camera icon
+    const iconSize = Math.min(width, height) * 0.4;
+    const iconX = (width - iconSize) / 2;
+    const iconY = (height - iconSize) / 2;
+    
+    // Camera body
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(iconX, iconY + iconSize * 0.2, iconSize * 0.8, iconSize * 0.5);
+    
+    // Lens
+    ctx.beginPath();
+    ctx.arc(iconX + iconSize * 0.4, iconY + iconSize * 0.45, iconSize * 0.2, 0, 2 * Math.PI);
+    ctx.fill();
+    
+    // Format label
+    ctx.fillStyle = '#fbbf24';
+    ctx.font = `bold ${iconSize * 0.12}px Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText('PROFESSIONAL', width / 2, iconY - iconSize * 0.1);
+    
+    // Extension label
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold ${iconSize * 0.15}px Arial, sans-serif`;
+    ctx.fillText(extension.replace('.', '').toUpperCase(), width / 2, iconY + iconSize * 0.9);
+    
+    const thumbnailDataURL = canvas.toDataURL('image/png');
+    
+    resolve({
+      thumbnail: thumbnailDataURL,
+      placeholder: true,
+      codec: 'professional',
+      colorSpace: 'unknown'
+    });
+  });
+}
+
+/**
  * Create a document thumbnail (placeholder icon)
  * @param {File} file - The document file
  * @param {string} fileType - The file type/extension
@@ -284,6 +368,172 @@ export async function createDocumentThumbnail(file, fileType, width = 600, heigh
     ctx.strokeStyle = '#e2e8f0';
     ctx.lineWidth = 2;
     ctx.strokeRect(iconX, iconY, iconSize, iconSize * 0.8);
+    
+    const thumbnailDataURL = canvas.toDataURL('image/png');
+    
+    resolve({
+      thumbnail: thumbnailDataURL,
+      placeholder: true
+    });
+  });
+}
+
+/**
+ * Create a project file thumbnail
+ * @param {File} file - The project file
+ * @param {string} projectType - The project type
+ * @param {number} width - Thumbnail width (default: 600)
+ * @param {number} height - Thumbnail height (default: 400)
+ * @returns {Promise<Object>} Object with thumbnail data URL
+ */
+export async function createProjectFileThumbnail(file, projectType, width = 600, height = 400) {
+  return new Promise((resolve) => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    canvas.width = width;
+    canvas.height = height;
+    
+    // Project file background
+    const gradient = ctx.createLinearGradient(0, 0, 0, height);
+    gradient.addColorStop(0, '#7c3aed');
+    gradient.addColorStop(1, '#5b21b6');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+    
+    // Project icon
+    const iconSize = Math.min(width, height) * 0.5;
+    const iconX = (width - iconSize) / 2;
+    const iconY = (height - iconSize) / 2;
+    
+    // Timeline representation
+    ctx.fillStyle = '#ffffff';
+    for (let i = 0; i < 3; i++) {
+      const barY = iconY + i * iconSize * 0.15 + iconSize * 0.2;
+      ctx.fillRect(iconX + iconSize * 0.1, barY, iconSize * 0.8, iconSize * 0.08);
+    }
+    
+    // Project type label
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold ${iconSize * 0.1}px Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText('PROJECT', width / 2, iconY - iconSize * 0.1);
+    
+    const thumbnailDataURL = canvas.toDataURL('image/png');
+    
+    resolve({
+      thumbnail: thumbnailDataURL,
+      placeholder: true
+    });
+  });
+}
+
+/**
+ * Create a metadata file thumbnail
+ * @param {File} file - The metadata file
+ * @param {string} metadataType - The metadata type
+ * @param {number} width - Thumbnail width (default: 600)
+ * @param {number} height - Thumbnail height (default: 400)
+ * @returns {Promise<Object>} Object with thumbnail data URL
+ */
+export async function createMetadataThumbnail(file, metadataType, width = 600, height = 400) {
+  return new Promise((resolve) => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    canvas.width = width;
+    canvas.height = height;
+    
+    // Metadata background
+    const gradient = ctx.createLinearGradient(0, 0, 0, height);
+    gradient.addColorStop(0, '#059669');
+    gradient.addColorStop(1, '#047857');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+    
+    // Metadata icon (tag-like)
+    const iconSize = Math.min(width, height) * 0.5;
+    const iconX = (width - iconSize) / 2;
+    const iconY = (height - iconSize) / 2;
+    
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(iconX, iconY + iconSize * 0.3);
+    ctx.lineTo(iconX + iconSize * 0.7, iconY + iconSize * 0.3);
+    ctx.lineTo(iconX + iconSize * 0.9, iconY + iconSize * 0.5);
+    ctx.lineTo(iconX + iconSize * 0.7, iconY + iconSize * 0.7);
+    ctx.lineTo(iconX, iconY + iconSize * 0.7);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Metadata label
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold ${iconSize * 0.08}px Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText('METADATA', width / 2, iconY - iconSize * 0.1);
+    
+    const thumbnailDataURL = canvas.toDataURL('image/png');
+    
+    resolve({
+      thumbnail: thumbnailDataURL,
+      placeholder: true
+    });
+  });
+}
+
+/**
+ * Create a hash file thumbnail
+ * @param {File} file - The hash file
+ * @param {string} hashType - The hash type
+ * @param {number} width - Thumbnail width (default: 600)
+ * @param {number} height - Thumbnail height (default: 400)
+ * @returns {Promise<Object>} Object with thumbnail data URL
+ */
+export async function createHashFileThumbnail(file, hashType, width = 600, height = 400) {
+  return new Promise((resolve) => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    
+    canvas.width = width;
+    canvas.height = height;
+    
+    // Hash file background
+    const gradient = ctx.createLinearGradient(0, 0, 0, height);
+    gradient.addColorStop(0, '#dc2626');
+    gradient.addColorStop(1, '#b91c1c');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+    
+    // Shield icon for security/verification
+    const iconSize = Math.min(width, height) * 0.5;
+    const iconX = (width - iconSize) / 2;
+    const iconY = (height - iconSize) / 2;
+    
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(iconX + iconSize * 0.5, iconY);
+    ctx.lineTo(iconX + iconSize * 0.8, iconY + iconSize * 0.2);
+    ctx.lineTo(iconX + iconSize * 0.8, iconY + iconSize * 0.6);
+    ctx.lineTo(iconX + iconSize * 0.5, iconY + iconSize * 0.8);
+    ctx.lineTo(iconX + iconSize * 0.2, iconY + iconSize * 0.6);
+    ctx.lineTo(iconX + iconSize * 0.2, iconY + iconSize * 0.2);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Checkmark
+    ctx.strokeStyle = '#dc2626';
+    ctx.lineWidth = iconSize * 0.05;
+    ctx.beginPath();
+    ctx.moveTo(iconX + iconSize * 0.35, iconY + iconSize * 0.5);
+    ctx.lineTo(iconX + iconSize * 0.45, iconY + iconSize * 0.6);
+    ctx.lineTo(iconX + iconSize * 0.65, iconY + iconSize * 0.35);
+    ctx.stroke();
+    
+    // Hash label
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `bold ${iconSize * 0.08}px Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText('CHECKSUM', width / 2, iconY - iconSize * 0.1);
     
     const thumbnailDataURL = canvas.toDataURL('image/png');
     
@@ -396,6 +646,28 @@ export async function processMediaFile(fileMetadata, progressCallback = null) {
         }
         break;
         
+      case 'professional_video':
+        try {
+          // Professional video formats may need special handling
+          const videoData = await createProfessionalVideoThumbnail(file);
+          enhancedMetadata.thumbnail = videoData.thumbnail;
+          enhancedMetadata.width = videoData.width;
+          enhancedMetadata.height = videoData.height;
+          enhancedMetadata.thumbnailWidth = videoData.thumbnailWidth;
+          enhancedMetadata.thumbnailHeight = videoData.thumbnailHeight;
+          enhancedMetadata.duration = videoData.duration;
+          enhancedMetadata.formattedDuration = videoData.formattedDuration;
+          enhancedMetadata.codec = videoData.codec;
+          enhancedMetadata.colorSpace = videoData.colorSpace;
+        } catch (error) {
+          console.warn(`Failed to create professional video thumbnail for ${file.name}:`, error);
+          // Create a professional video placeholder
+          const placeholder = await createDocumentThumbnail(file, 'PRO');
+          enhancedMetadata.thumbnail = placeholder.thumbnail;
+          enhancedMetadata.placeholder = true;
+        }
+        break;
+        
       case 'audio':
         try {
           const audioData = await createAudioThumbnail(file);
@@ -410,6 +682,27 @@ export async function processMediaFile(fileMetadata, progressCallback = null) {
           enhancedMetadata.thumbnail = placeholder.thumbnail;
           enhancedMetadata.placeholder = true;
         }
+        break;
+        
+      case 'project_files':
+        // Create specialized thumbnails for project files
+        const projectPlaceholder = await createProjectFileThumbnail(file, enhancedMetadata.projectType || 'PROJECT');
+        enhancedMetadata.thumbnail = projectPlaceholder.thumbnail;
+        enhancedMetadata.placeholder = true;
+        break;
+        
+      case 'metadata':
+        // Create specialized thumbnails for metadata files
+        const metadataPlaceholder = await createMetadataThumbnail(file, enhancedMetadata.metadataType || 'META');
+        enhancedMetadata.thumbnail = metadataPlaceholder.thumbnail;
+        enhancedMetadata.placeholder = true;
+        break;
+        
+      case 'hash_files':
+        // Create specialized thumbnails for hash files
+        const hashPlaceholder = await createHashFileThumbnail(file, enhancedMetadata.hashType || 'HASH');
+        enhancedMetadata.thumbnail = hashPlaceholder.thumbnail;
+        enhancedMetadata.placeholder = true;
         break;
         
       default:
@@ -473,7 +766,8 @@ export async function processMediaFiles(fileList, progressCallback = null, concu
             type: 'batch_progress',
             completed: completed,
             total: total,
-            progress: Math.round((completed / total) * 100)
+            progress: Math.round((completed / total) * 100),
+            file: processed // Pass the processed file object
           });
         }
         
@@ -482,19 +776,22 @@ export async function processMediaFiles(fileList, progressCallback = null, concu
         completed++;
         console.error(`Failed to process file ${fileMetadata.name}:`, error);
         
+        const errorFile = {
+          ...fileMetadata,
+          processingError: error.message
+        };
+        
         if (progressCallback) {
           progressCallback({
             type: 'batch_progress',
             completed: completed,
             total: total,
-            progress: Math.round((completed / total) * 100)
+            progress: Math.round((completed / total) * 100),
+            file: errorFile // Pass the error file object
           });
         }
         
-        return {
-          ...fileMetadata,
-          processingError: error.message
-        };
+        return errorFile;
       }
     });
 

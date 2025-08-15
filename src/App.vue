@@ -3,12 +3,12 @@
     <header class="header">
       <h1>creative.space</h1>
       <nav class="nav-links">
-        <router-link to="/" class="nav-link">Collections</router-link>
-        <router-link to="/room" class="nav-link">Rooms</router-link>
-        <router-link to="/spaces" class="nav-link">
+        <router-link to="/files/rooms" class="nav-link">
           <font-awesome-icon v-if="hasFontAwesome" :icon="['fas', 'door-open']" style="color: #3c5a9b; margin-right: 6px;" />
           Spaces
         </router-link>
+        <router-link to="/files/rooms" class="nav-link">File Rooms</router-link>
+        <router-link to="/room" class="nav-link">Rooms</router-link>
         <router-link to="/film-strip-demo" class="nav-link">Film Strip Demo</router-link>
         <router-link to="/data-analysis" class="nav-link">Data Analysis</router-link>
       </nav>

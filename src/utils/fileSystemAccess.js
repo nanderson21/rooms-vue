@@ -6,12 +6,16 @@
 
 // Supported file types for different media categories
 export const SUPPORTED_FILE_TYPES = {
-  images: ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.tiff', '.ico'],
-  videos: ['.mp4', '.webm', '.ogg', '.avi', '.mov', '.wmv', '.flv', '.mkv', '.m4v', '.3gp'],
-  audio: ['.mp3', '.wav', '.ogg', '.aac', '.flac', '.m4a', '.wma', '.opus'],
-  documents: ['.pdf', '.doc', '.docx', '.txt', '.rtf', '.odt', '.pages'],
-  archives: ['.zip', '.rar', '.7z', '.tar', '.gz', '.bz2'],
-  data: ['.json', '.xml', '.csv', '.xlsx', '.xls']
+  images: ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.tiff', '.ico', '.heic', '.heif', '.psd', '.xcf', '.raw', '.cr2', '.nef', '.arw', '.dng'],
+  videos: ['.mp4', '.webm', '.ogg', '.avi', '.mov', '.wmv', '.flv', '.mkv', '.m4v', '.3gp', '.mxf', '.ts', '.m2ts', '.mts', '.mpg', '.mpeg', '.vob', '.asf', '.f4v', '.swf'],
+  professional_video: ['.r3d', '.rdc', '.rdm', '.braw', '.arriraw', '.ari', '.dpx', '.exr', '.cin', '.mxf', '.gxf', '.lxf'],
+  audio: ['.mp3', '.wav', '.ogg', '.aac', '.flac', '.m4a', '.wma', '.opus', '.aiff', '.au', '.pcm', '.dts', '.ac3', '.amr'],
+  documents: ['.pdf', '.doc', '.docx', '.txt', '.rtf', '.odt', '.pages', '.md', '.tex', '.docm', '.dotx'],
+  project_files: ['.drp', '.drb', '.drt', '.drx', '.aep', '.prproj', '.fcpxml', '.xml', '.edl', '.omf', '.aaf'],
+  archives: ['.zip', '.rar', '.7z', '.tar', '.gz', '.bz2', '.xz', '.lzma', '.cab', '.ace', '.arj'],
+  data: ['.json', '.xml', '.csv', '.xlsx', '.xls', '.yaml', '.yml', '.toml', '.ini', '.cfg'],
+  metadata: ['.xmp', '.iptc', '.exif', '.sidecar', '.thm', '.lut', '.cube', '.3dl', '.ccc', '.cdl'],
+  hash_files: ['.mhl', '.md5', '.sha1', '.sha256', '.sha512', '.crc32', '.sfv', '.par2']
 };
 
 // All supported extensions flattened
@@ -95,17 +99,21 @@ export function getFileExtension(filename) {
 /**
  * Determine file category based on extension
  * @param {string} filename - The filename to categorize
- * @returns {string} The file category ('image', 'video', 'audio', 'document', 'archive', 'data', 'other')
+ * @returns {string} The file category ('image', 'video', 'professional_video', 'audio', 'document', 'project_files', 'archive', 'data', 'metadata', 'hash_files', 'other')
  */
 export function getFileCategory(filename) {
   const extension = getFileExtension(filename);
   
   if (SUPPORTED_FILE_TYPES.images.includes(extension)) return 'image';
   if (SUPPORTED_FILE_TYPES.videos.includes(extension)) return 'video';
+  if (SUPPORTED_FILE_TYPES.professional_video.includes(extension)) return 'professional_video';
   if (SUPPORTED_FILE_TYPES.audio.includes(extension)) return 'audio';
   if (SUPPORTED_FILE_TYPES.documents.includes(extension)) return 'document';
+  if (SUPPORTED_FILE_TYPES.project_files.includes(extension)) return 'project_files';
   if (SUPPORTED_FILE_TYPES.archives.includes(extension)) return 'archive';
   if (SUPPORTED_FILE_TYPES.data.includes(extension)) return 'data';
+  if (SUPPORTED_FILE_TYPES.metadata.includes(extension)) return 'metadata';
+  if (SUPPORTED_FILE_TYPES.hash_files.includes(extension)) return 'hash_files';
   
   return 'other';
 }
@@ -129,6 +137,15 @@ export function getMimeType(filename) {
     '.svg': 'image/svg+xml',
     '.tiff': 'image/tiff',
     '.ico': 'image/x-icon',
+    '.heic': 'image/heic',
+    '.heif': 'image/heif',
+    '.psd': 'image/vnd.adobe.photoshop',
+    '.xcf': 'image/x-xcf',
+    '.raw': 'image/x-canon-crw',
+    '.cr2': 'image/x-canon-cr2',
+    '.nef': 'image/x-nikon-nef',
+    '.arw': 'image/x-sony-arw',
+    '.dng': 'image/x-adobe-dng',
     
     // Videos
     '.mp4': 'video/mp4',
@@ -141,6 +158,29 @@ export function getMimeType(filename) {
     '.mkv': 'video/x-matroska',
     '.m4v': 'video/x-m4v',
     '.3gp': 'video/3gpp',
+    '.mxf': 'application/mxf',
+    '.ts': 'video/mp2t',
+    '.m2ts': 'video/mp2t',
+    '.mts': 'video/mp2t',
+    '.mpg': 'video/mpeg',
+    '.mpeg': 'video/mpeg',
+    '.vob': 'video/dvd',
+    '.asf': 'video/x-ms-asf',
+    '.f4v': 'video/x-f4v',
+    '.swf': 'application/x-shockwave-flash',
+    
+    // Professional Video
+    '.r3d': 'video/x-red-r3d',
+    '.rdc': 'application/x-red-rdc',
+    '.rdm': 'application/x-red-rdm',
+    '.braw': 'video/x-blackmagic-braw',
+    '.arriraw': 'video/x-arri-arriraw',
+    '.ari': 'video/x-arri-ari',
+    '.dpx': 'image/x-dpx',
+    '.exr': 'image/x-exr',
+    '.cin': 'image/x-cineon',
+    '.gxf': 'application/gxf',
+    '.lxf': 'application/lxf',
     
     // Audio
     '.mp3': 'audio/mpeg',
@@ -151,6 +191,12 @@ export function getMimeType(filename) {
     '.m4a': 'audio/mp4',
     '.wma': 'audio/x-ms-wma',
     '.opus': 'audio/opus',
+    '.aiff': 'audio/x-aiff',
+    '.au': 'audio/basic',
+    '.pcm': 'audio/L16',
+    '.dts': 'audio/vnd.dts',
+    '.ac3': 'audio/ac3',
+    '.amr': 'audio/amr',
     
     // Documents
     '.pdf': 'application/pdf',
@@ -159,6 +205,23 @@ export function getMimeType(filename) {
     '.txt': 'text/plain',
     '.rtf': 'application/rtf',
     '.odt': 'application/vnd.oasis.opendocument.text',
+    '.pages': 'application/x-iwork-pages-sffpages',
+    '.md': 'text/markdown',
+    '.tex': 'application/x-tex',
+    '.docm': 'application/vnd.ms-word.document.macroEnabled.12',
+    '.dotx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.template',
+    
+    // Project Files
+    '.drp': 'application/x-davinci-project',
+    '.drb': 'application/x-davinci-bin',
+    '.drt': 'application/x-davinci-timeline',
+    '.drx': 'application/x-davinci-look',
+    '.aep': 'application/x-after-effects-project',
+    '.prproj': 'application/x-premiere-project',
+    '.fcpxml': 'application/x-finalcut-xml',
+    '.edl': 'application/x-edit-decision-list',
+    '.omf': 'application/x-omf',
+    '.aaf': 'application/x-aaf',
     
     // Archives
     '.zip': 'application/zip',
@@ -167,13 +230,45 @@ export function getMimeType(filename) {
     '.tar': 'application/x-tar',
     '.gz': 'application/gzip',
     '.bz2': 'application/x-bzip2',
+    '.xz': 'application/x-xz',
+    '.lzma': 'application/x-lzma',
+    '.cab': 'application/vnd.ms-cab-compressed',
+    '.ace': 'application/x-ace-compressed',
+    '.arj': 'application/x-arj',
     
     // Data
     '.json': 'application/json',
     '.xml': 'application/xml',
     '.csv': 'text/csv',
     '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    '.xls': 'application/vnd.ms-excel'
+    '.xls': 'application/vnd.ms-excel',
+    '.yaml': 'application/x-yaml',
+    '.yml': 'application/x-yaml',
+    '.toml': 'application/toml',
+    '.ini': 'text/plain',
+    '.cfg': 'text/plain',
+    
+    // Metadata
+    '.xmp': 'application/rdf+xml',
+    '.iptc': 'application/x-iptc',
+    '.exif': 'application/x-exif',
+    '.sidecar': 'application/x-sidecar',
+    '.thm': 'image/jpeg',
+    '.lut': 'application/x-lut',
+    '.cube': 'application/x-cube-lut',
+    '.3dl': 'application/x-3dl-lut',
+    '.ccc': 'application/x-ccc',
+    '.cdl': 'application/x-cdl',
+    
+    // Hash Files
+    '.mhl': 'application/x-mhl',
+    '.md5': 'text/plain',
+    '.sha1': 'text/plain',
+    '.sha256': 'text/plain',
+    '.sha512': 'text/plain',
+    '.crc32': 'text/plain',
+    '.sfv': 'text/plain',
+    '.par2': 'application/x-par2'
   };
 
   return mimeTypes[extension] || 'application/octet-stream';
@@ -229,11 +324,26 @@ export async function extractFileMetadata(fileHandle, relativePath = '') {
     } else if (category === 'video') {
       metadata.filetype = 'video';
       metadata.duration = null; // Will be populated when creating thumbnails
+    } else if (category === 'professional_video') {
+      metadata.filetype = 'professional_video';
+      metadata.duration = null; // Will be populated when creating thumbnails
+      metadata.codec = null; // Professional video codec info
+      metadata.colorSpace = null; // Color space information
+      metadata.frameRate = null; // Frame rate information
     } else if (category === 'audio') {
       metadata.filetype = 'audio';
       metadata.duration = null; // Will be populated when processing audio
     } else if (category === 'document') {
       metadata.filetype = 'document';
+    } else if (category === 'project_files') {
+      metadata.filetype = 'project_files';
+      metadata.projectType = getProjectFileType(extension);
+    } else if (category === 'metadata') {
+      metadata.filetype = 'metadata';
+      metadata.metadataType = getMetadataType(extension);
+    } else if (category === 'hash_files') {
+      metadata.filetype = 'hash_files';
+      metadata.hashType = getHashType(extension);
     } else {
       metadata.filetype = category;
     }
@@ -261,6 +371,68 @@ function generateFileId(path, name) {
     hash = hash & hash; // Convert to 32-bit integer
   }
   return `file_${Math.abs(hash)}_${Date.now()}`;
+}
+
+/**
+ * Determine project file type based on extension
+ * @param {string} extension - The file extension
+ * @returns {string} The project file type
+ */
+function getProjectFileType(extension) {
+  const projectTypes = {
+    '.drp': 'davinci_project',
+    '.drb': 'davinci_bin',
+    '.drt': 'davinci_timeline',
+    '.drx': 'davinci_look',
+    '.aep': 'after_effects',
+    '.prproj': 'premiere_pro',
+    '.fcpxml': 'final_cut_pro',
+    '.xml': 'generic_xml',
+    '.edl': 'edit_decision_list',
+    '.omf': 'open_media_framework',
+    '.aaf': 'advanced_authoring_format'
+  };
+  return projectTypes[extension] || 'unknown_project';
+}
+
+/**
+ * Determine metadata file type based on extension
+ * @param {string} extension - The file extension
+ * @returns {string} The metadata file type
+ */
+function getMetadataType(extension) {
+  const metadataTypes = {
+    '.xmp': 'adobe_xmp',
+    '.iptc': 'iptc_metadata',
+    '.exif': 'exif_metadata',
+    '.sidecar': 'sidecar_metadata',
+    '.thm': 'thumbnail_cache',
+    '.lut': 'lookup_table',
+    '.cube': 'cube_lut',
+    '.3dl': '3dl_lut',
+    '.ccc': 'color_correction_collection',
+    '.cdl': 'color_decision_list'
+  };
+  return metadataTypes[extension] || 'unknown_metadata';
+}
+
+/**
+ * Determine hash file type based on extension
+ * @param {string} extension - The file extension
+ * @returns {string} The hash file type
+ */
+function getHashType(extension) {
+  const hashTypes = {
+    '.mhl': 'media_hash_list',
+    '.md5': 'md5_checksum',
+    '.sha1': 'sha1_checksum',
+    '.sha256': 'sha256_checksum',
+    '.sha512': 'sha512_checksum',
+    '.crc32': 'crc32_checksum',
+    '.sfv': 'simple_file_verification',
+    '.par2': 'parity_archive'
+  };
+  return hashTypes[extension] || 'unknown_hash';
 }
 
 /**
@@ -338,10 +510,14 @@ export function calculateDirectoryStats(files) {
     categories: {
       image: { count: 0, size: 0, formattedSize: '0 B' },
       video: { count: 0, size: 0, formattedSize: '0 B' },
+      professional_video: { count: 0, size: 0, formattedSize: '0 B' },
       audio: { count: 0, size: 0, formattedSize: '0 B' },
       document: { count: 0, size: 0, formattedSize: '0 B' },
+      project_files: { count: 0, size: 0, formattedSize: '0 B' },
       archive: { count: 0, size: 0, formattedSize: '0 B' },
       data: { count: 0, size: 0, formattedSize: '0 B' },
+      metadata: { count: 0, size: 0, formattedSize: '0 B' },
+      hash_files: { count: 0, size: 0, formattedSize: '0 B' },
       other: { count: 0, size: 0, formattedSize: '0 B' }
     }
   };

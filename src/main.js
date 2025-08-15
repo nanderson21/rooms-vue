@@ -2,11 +2,11 @@ import { createApp } from 'vue'
 import { createRouter, createWebHistory } from 'vue-router'
 import { ViewTransitionsPlugin } from 'vue-view-transitions'
 import App from './App.vue'
-import CollectionView from './views/CollectionView.vue'
-import CollectionItemDetail from './views/CollectionItemDetail.vue'
+// Legacy CollectionView import removed - using RoomView instead
+import RoomItemDetail from './views/RoomItemDetail.vue'
 import RoomView from './views/RoomView.vue'
 import RoomContentDetail from './views/RoomContentDetail.vue'
-import SpacesView from './views/SpacesView.vue'
+import RoomsView from './views/RoomsView.vue'
 import FileSystemRoomView from './views/FileSystemRoomView.vue'
 import FilmStripDemoView from './views/FilmStripDemoView.vue'
 import DataAnalysisView from './views/DataAnalysisView.vue'
@@ -36,7 +36,10 @@ import {
   faArrowLeft,
   faChevronDown,
   faChevronRight,
-  faCog
+  faCog,
+  faLock,
+  faDatabase,
+  faTrash
 } from '@fortawesome/free-solid-svg-icons'
 
 // Add icons to the library
@@ -61,7 +64,10 @@ library.add(
   faArrowLeft,
   faChevronDown,
   faChevronRight,
-  faCog
+  faCog,
+  faLock,
+  faDatabase,
+  faTrash
 )
 
 // Define a proper polyfill for browsers that don't support View Transitions API
@@ -90,33 +96,32 @@ if (!document.querySelector('meta[name="view-transition"]')) {
 const routes = [
   { 
     path: '/', 
-    component: CollectionView, 
-    name: 'home',
+    redirect: '/files/rooms',
     meta: { transition: 'view' }
   },
   { 
     path: '/collection/:id', 
-    component: CollectionView, 
+    component: RoomView, 
     name: 'collection',
     meta: { transition: 'view' }
   },
   { 
     path: '/collection/:id/item/:itemId', 
-    component: CollectionItemDetail, 
+    component: RoomItemDetail, 
     name: 'item',
     meta: { transition: 'view' }
   },
-  // Room routes
+  // Room routes (legacy)
   { 
     path: '/room', 
     component: RoomView, 
-    name: 'rooms',
+    name: 'rooms-legacy',
     meta: { transition: 'view' }
   },
   { 
     path: '/room/:id', 
     component: RoomView, 
-    name: 'room',
+    name: 'room-legacy',
     meta: { transition: 'view' }
   },
   { 
@@ -125,25 +130,39 @@ const routes = [
     name: 'room-content',
     meta: { transition: 'view' }
   },
-  // Spaces route
+  // Spaces routes (new primary routes)
   {
-    path: '/spaces',
-    component: SpacesView,
+    path: '/files/rooms',
+    component: RoomsView,
     name: 'spaces',
     meta: { transition: 'view' }
   },
-  // Filesystem room route
   {
-    path: '/spaces/filesystem-room/:roomId',
-    component: FileSystemRoomView,
-    name: 'filesystem-room',
+    path: '/files/rooms/:roomId',
+    component: RoomsView,
+    name: 'spaces-room',
     meta: { transition: 'view' }
   },
-  // Filesystem room item detail route
+  {
+    path: '/files/rooms/:roomId/:folderPath(.*)',
+    component: RoomsView,
+    name: 'spaces-folder',
+    meta: { transition: 'view' }
+  },
+  // Legacy redirects
+  {
+    path: '/spaces',
+    redirect: '/files/rooms',
+    meta: { transition: 'view' }
+  },
+  {
+    path: '/spaces/filesystem-room/:roomId',
+    redirect: to => `/files/rooms/${to.params.roomId}`,
+    meta: { transition: 'view' }
+  },
   {
     path: '/spaces/filesystem-room/:roomId/file/:fileId',
-    component: CollectionItemDetail,
-    name: 'filesystem-room-file',
+    redirect: to => `/files/rooms/${to.params.roomId}?file=${to.params.fileId}`,
     meta: { transition: 'view' }
   },
   // Film Strip Demo route
