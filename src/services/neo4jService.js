@@ -137,7 +137,153 @@ class Neo4jService {
     `);
   }
 
-  close() {
+  // --- Tagging & Grouping & Folder Roles ---
+
+  async createTag(name, color) {
+    const records = await this.query(`
+      MERGE (t:Tag {name: $name})
+      ON CREATE SET t.color = $color
+      ON MATCH SET t.color = COALESCE($color, t.color)
+      RETURN t.name as name, t.color as color
+    `, { name, color });
+    return records[0] || null;
+  }
+
+  async tagItemsByPaths(paths, tagName, color) {
+    if (!paths || paths.length === 0) return [];
+    return await this.query(`
+      MERGE (t:Tag {name: $tagName})
+      ON CREATE SET t.color = $color
+      WITH t
+      UNWIND $paths as p
+      MATCH (f:FileSystemItem {path: p})
+      MERGE (f)-[r:TAGGED_WITH]->(t)
+      RETURN f.path as path, t.name as tag, t.color as color
+    `, { paths, tagName, color });
+  }
+
+  async tagItemsByExtension(extension, tagName, color) {
+    return await this.query(`
+      MERGE (t:Tag {name: $tagName})
+      ON CREATE SET t.color = $color
+      WITH t
+      MATCH (f:FileSystemItem)
+      WHERE f.isDir = false AND f.name CONTAINS '.' AND toLower(split(f.name, '.')[-1]) = toLower($extension)
+      MERGE (f)-[:TAGGED_WITH]->(t)
+      RETURN count(f) as taggedCount, t.name as tag, t.color as color
+    `, { extension, tagName, color });
+  }
+
+  async getTagsForPath(path) {
+    return await this.query(`
+      MATCH (f:FileSystemItem {path: $path})-[:TAGGED_WITH]->(t:Tag)
+      RETURN t.name as name, t.color as color
+    `, { path });
+  }
+
+  async setFolderColor(path, color) {
+    return await this.query(`
+      MATCH (d:FileSystemItem {path: $path})
+      WHERE d.isDir = true
+      SET d.folderColor = $color
+      RETURN d.path as path, d.folderColor as color
+    `, { path, color });
+  }
+
+  async createGroup(name, color = null) {
+    const records = await this.query(`
+      MERGE (g:Group {name: $name})
+      ON CREATE SET g.color = $color, g.createdAt = datetime()
+      RETURN g.name as name, g.color as color
+    `, { name, color });
+    return records[0] || null;
+  }
+
+  async addItemsToGroup(groupName, paths) {
+    if (!paths || paths.length === 0) return [];
+    return await this.query(`
+      MERGE (g:Group {name: $groupName})
+      WITH g
+      UNWIND $paths as p
+      MATCH (f:FileSystemItem {path: p})
+      MERGE (g)-[:HAS_MEMBER]->(f)
+      RETURN g.name as group, collect(f.path) as members
+    `, { groupName, paths });
+  }
+
+  async removeItemsFromGroup(groupName, paths) {
+    if (!paths || paths.length === 0) return 0;
+    return await this.query(`
+      MATCH (g:Group {name: $groupName})-[r:HAS_MEMBER]->(f:FileSystemItem)
+      WHERE f.path IN $paths
+      DELETE r
+      RETURN count(r) as removed
+    `, { groupName, paths });
+  }
+
+  async addRelationship(sourcePath, targetPath, relationshipType, properties = {}) {
+    // Requires APOC to create dynamic relationship types
+    return await this.query(`
+      MATCH (s:FileSystemItem {path: $sourcePath})
+      MATCH (t:FileSystemItem {path: $targetPath})
+      CALL apoc.create.relationship(s, $relType, $props, t) YIELD rel
+      RETURN type(rel) as type
+    `, { sourcePath, targetPath, relType: relationshipType, props: properties });
+  }
+
+  async getGroupsForPath(path) {
+    return await this.query(`
+      MATCH (g:Group)-[:HAS_MEMBER]->(f:FileSystemItem {path: $path})
+      RETURN g.name as name, g.color as color
+    `, { path });
+  }
+
+  async getAllTags(limit = 100) {
+    return await this.query(`
+      MATCH (t:Tag)
+      RETURN t.name as name, t.color as color
+      ORDER BY t.name
+      LIMIT $limit
+    `, { limit });
+  }
+
+  async getAllGroups(limit = 100) {
+    return await this.query(`
+      MATCH (g:Group)
+      RETURN g.name as name, g.color as color
+      ORDER BY g.name
+      LIMIT $limit
+    `, { limit });
+  }
+
+  async getFolderColor(path) {
+    const rows = await this.query(`
+      MATCH (d:FileSystemItem {path: $path})
+      WHERE d.isDir = true AND d.folderColor IS NOT NULL
+      RETURN d.folderColor as color
+    `, { path });
+    return rows[0]?.color || null;
+  }
+
+  async getTagsForPaths(paths) {
+    if (!paths || paths.length === 0) return [];
+    return await this.query(`
+      UNWIND $paths as p
+      MATCH (f:FileSystemItem {path: p})-[:TAGGED_WITH]->(t:Tag)
+      RETURN f.path as path, collect({name: t.name, color: t.color}) as tags
+    `, { paths });
+  }
+
+  async getDescendantPaths(directoryPath, limit = 1000) {
+    return await this.query(`
+      MATCH (f:FileSystemItem)
+      WHERE f.path STARTS WITH $dir AND f.path <> $dir
+      RETURN f.path as path
+      LIMIT $limit
+    `, { dir: directoryPath, limit });
+  }
+
+  async close() {
     return this.driver.close();
   }
 }

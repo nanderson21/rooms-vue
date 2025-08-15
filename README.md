@@ -152,6 +152,28 @@ The included `docker-compose.yml` sets up Neo4j with:
 - APOC plugins enabled
 - Persistent data volumes
 
+## Folder roles, tags, and sidecars
+
+- Sidecar files can be placed in `src/datasets/sidecars/*.json` to define folder roles, colors, and tags for specific paths.
+- Example sidecar (`src/datasets/sidecars/demo-room.json`):
+```json
+{
+  "path": "/Demo",
+  "role": "room",
+  "color": "#3c5a9b",
+  "tags": [
+    { "name": "room", "color": "#3c5a9b" },
+    { "name": "demo", "color": "#1f77b4" }
+  ]
+}
+```
+- After main ingestion, run the augmentation step to apply sidecars and auto-tags by extension:
+```bash
+node src/scripts/neo4j-ingest.js && node -e "import('./src/scripts/neo4j-ingest.js').then(m=>m.driver && process.exit(0))"
+```
+
+- Explorer view supports multi-select, bulk tagging, grouping, and folder flattening.
+
 ## Contributing
 
 1. Fork the repository

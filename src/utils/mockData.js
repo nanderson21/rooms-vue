@@ -195,7 +195,9 @@ const rooms = [
     dateCreated: '2023-09-15T12:00:00Z',
     totalSize: '1.2 GB',
     status: 'active',
-    statusText: 'Active'
+    statusText: 'Active',
+    color: '#3c5a9b',
+    tags: [{ name: 'room', color: '#3c5a9b' }, { name: 'demo', color: '#1f77b4' }]
   },
   {
     id: 'room-design',
@@ -238,6 +240,8 @@ const roomContents = {
       createdDate: '2023-09-10',
       modifiedDate: '2023-09-12',
       status: 'review',
+      role: 'video',
+      color: '#1f77b4',
       comments: [
         {
           id: 'comment-1',

@@ -126,14 +126,25 @@
           placeholder="Search files..."
           class="search-input"
         />
-        
+        <div class="controls-row" style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
+          <label><input type="checkbox" v-model="flattenFolders"> Flatten folders</label>
+          <select v-model="bulkTagName">
+            <option value="">Select tag</option>
+            <option v-for="t in allTags" :key="t.name" :value="t.name">{{ t.name }}</option>
+          </select>
+          <input v-model="bulkTagColor" type="color" title="Tag color" />
+          <button class="viz-button" @click="applyTagToSelection" :disabled="selectedPaths.length===0 || !bulkTagName">Tag Selected</button>
+          <input v-model="groupName" placeholder="Group name" style="padding:6px;border:1px solid #ddd;border-radius:4px;"/>
+          <button class="viz-button" @click="addSelectionToGroup" :disabled="selectedPaths.length===0 || !groupName">Add to Group</button>
+        </div>
         <div class="file-list">
           <div 
-            v-for="file in searchResults" 
+            v-for="file in (flattenFolders ? flattenedResults : searchResults)" 
             :key="file.path"
             class="file-item"
             :class="{ directory: file.isDir }"
           >
+            <input type="checkbox" v-model="selection[file.path]" @change="onItemCheck(file)"/>
             <span class="file-name">{{ file.name }}</span>
             <span class="file-path">{{ file.path }}</span>
             <span v-if="!file.isDir" class="file-size">{{ formatFileSize(file.size) }}</span>
@@ -195,7 +206,15 @@ export default {
         { id: 'stats', label: 'Statistics' },
         { id: 'explorer', label: 'Explorer' },
         { id: 'large', label: 'Large Files' }
-      ]
+      ],
+      selection: {},
+      selectedPaths: [],
+      flattenFolders: false,
+      flattenedResults: [],
+      bulkTagName: '',
+      bulkTagColor: '#7F7F7F',
+      groupName: '',
+      allTags: []
     };
   },
   
@@ -205,6 +224,12 @@ export default {
     if (this.datasets.length > 0) {
       this.selectedDataset = this.datasets[0].name;
       await this.loadDataset();
+    }
+    // load tags
+    try {
+      this.allTags = await neo4jService.getAllTags();
+    } catch (e) {
+      console.warn('Failed to load tags', e);
     }
   },
   
@@ -279,10 +304,14 @@ export default {
     async searchFiles() {
       if (this.searchQuery.length < 2) {
         this.searchResults = [];
+        this.flattenedResults = [];
         return;
       }
       
       this.searchResults = await neo4jService.searchFiles(this.selectedDataset, this.searchQuery);
+      if (this.flattenFolders) {
+        await this.buildFlattenedResults();
+      }
     },
     
     async renderTreeView() {
@@ -836,6 +865,62 @@ export default {
     filterHierarchy() {
       // Implement hierarchy filtering
       this.loadHierarchyData();
+    },
+    async buildFlattenedResults() {
+      const results = [];
+      for (const file of this.searchResults) {
+        if (file.isDir) {
+          const descendants = await neo4jService.getDescendantPaths(file.path, 500);
+          const paths = descendants.map(d => d.path);
+          if (paths.length) {
+            const tagged = await neo4jService.getTagsForPaths(paths);
+            const tagMap = new Map(tagged.map(t => [t.path, t.tags]));
+            for (const p of paths) {
+              results.push({ name: p.split('/').pop(), path: p, isDir: false, size: 0, tags: tagMap.get(p) || [] });
+            }
+          }
+        } else {
+          results.push(file);
+        }
+      }
+      this.flattenedResults = results;
+    },
+    syncSelected() {
+      this.selectedPaths = Object.keys(this.selection).filter(p => this.selection[p]);
+    },
+    async onItemCheck(file) {
+      const checked = !!this.selection[file.path];
+      if (file.isDir) {
+        try {
+          const descendants = await neo4jService.getDescendantPaths(file.path, 2000);
+          for (const d of descendants) {
+            this.selection[d.path] = checked;
+          }
+        } catch (e) {
+          console.warn('Failed to fetch descendants for directory', file.path, e);
+        }
+      }
+      this.syncSelected();
+    },
+    async applyTagToSelection() {
+      if (!this.selectedPaths.length || !this.bulkTagName) return;
+      try {
+        await neo4jService.tagItemsByPaths(this.selectedPaths, this.bulkTagName, this.bulkTagColor);
+        this.selection = {};
+        this.selectedPaths = [];
+      } catch (e) {
+        console.error('Failed to tag selection', e);
+      }
+    },
+    async addSelectionToGroup() {
+      if (!this.selectedPaths.length || !this.groupName) return;
+      try {
+        await neo4jService.addItemsToGroup(this.groupName, this.selectedPaths);
+        this.selection = {};
+        this.selectedPaths = [];
+      } catch (e) {
+        console.error('Failed to add to group', e);
+      }
     }
   },
   
@@ -977,7 +1062,7 @@ export default {
 
 .file-item {
   display: grid;
-  grid-template-columns: 1fr 2fr auto;
+  grid-template-columns: auto 1fr 2fr auto;
   gap: 10px;
   padding: 8px;
   border-bottom: 1px solid #eee;
