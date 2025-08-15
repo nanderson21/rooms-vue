@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 import neo4j from 'neo4j-driver';
 import fs from 'fs';
 import path from 'path';
@@ -127,6 +129,75 @@ async function main() {
   } finally {
     await driver.close();
   }
+}
+
+async function runIngest() {
+	const session = driver.session();
+	try {
+		// Example: augment existing FileSystemItem nodes with sidecar-derived tags and folder colors
+		// 1) Create constraints for Tag and Group
+		await session.run(`CREATE CONSTRAINT tag_name_unique IF NOT EXISTS FOR (t:Tag) REQUIRE t.name IS UNIQUE`);
+		await session.run(`CREATE CONSTRAINT group_name_unique IF NOT EXISTS FOR (g:Group) REQUIRE g.name IS UNIQUE`);
+
+		// 2) Derive extension-based tags
+		await session.run(`
+			MATCH (f:FileSystemItem)
+			WHERE f.isDir = false AND f.name CONTAINS '.'
+			WITH f, toLower(split(f.name, '.')[-1]) as ext
+			MERGE (t:Tag {name: ext})
+			ON CREATE SET t.color = CASE ext
+			  WHEN 'mov' THEN '#1F77B4'
+			  WHEN 'mp4' THEN '#1F77B4'
+			  WHEN 'wav' THEN '#FF7F0E'
+			  WHEN 'mp3' THEN '#FF7F0E'
+			  WHEN 'jpg' THEN '#2CA02C'
+			  WHEN 'jpeg' THEN '#2CA02C'
+			  WHEN 'png' THEN '#2CA02C'
+			  WHEN 'pdf' THEN '#9467BD'
+			  ELSE '#7F7F7F' END
+			MERGE (f)-[:TAGGED_WITH]->(t)
+		`);
+
+		// 3) Set folder color property for directories based on heuristic or sidecar if present
+		// If a sidecar JSON exists next to the folder (e.g., /path/.room.meta.json), read color
+		const rootSidecarDir = './src/datasets/sidecars';
+		if (fs.existsSync(rootSidecarDir)) {
+			const files = fs.readdirSync(rootSidecarDir);
+			for (const file of files) {
+				if (!file.endsWith('.json')) continue;
+				const full = path.join(rootSidecarDir, file);
+				try {
+					const data = JSON.parse(fs.readFileSync(full, 'utf-8'));
+					if (data && data.path && data.color) {
+						await session.run(`
+							MATCH (d:FileSystemItem {path: $path})
+							WHERE d.isDir = true
+							SET d.folderColor = $color, d.role = COALESCE($role, d.role)
+						`, { path: data.path, color: data.color, role: data.role || null });
+					}
+					// tags for the folder
+					if (data && data.path && Array.isArray(data.tags) && data.tags.length) {
+						for (const tag of data.tags) {
+							await session.run(`
+								MERGE (t:Tag {name: $name})
+								ON CREATE SET t.color = $color
+								WITH t
+								MATCH (d:FileSystemItem {path: $path})
+								MERGE (d)-[:TAGGED_WITH]->(t)
+							`, { name: tag.name, color: tag.color || '#7F7F7F', path: data.path });
+						}
+					}
+				} catch (e) {
+					console.warn('Failed reading sidecar', full, e.message);
+				}
+			}
+		}
+
+		console.log('Ingest augmentation complete.');
+	} finally {
+		await session.close();
+		await driver.close();
+	}
 }
 
 // Always run when script is executed

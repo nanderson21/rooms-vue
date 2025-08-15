@@ -1,6 +1,7 @@
 import neo4j from 'neo4j-driver';
 import fs from 'fs';
 import readline from 'readline';
+import path from 'path';
 
 const driver = neo4j.driver('bolt://localhost:7687', neo4j.auth.basic('neo4j', 'password123'));
 
@@ -154,6 +155,66 @@ async function processItem(session, item, datasetName) {
   }
 }
 
+async function augmentWithSidecarsAndTags(driver) {
+	const session = driver.session();
+	try {
+		await session.run(`CREATE CONSTRAINT tag_name_unique IF NOT EXISTS FOR (t:Tag) REQUIRE t.name IS UNIQUE`);
+		await session.run(`CREATE CONSTRAINT group_name_unique IF NOT EXISTS FOR (g:Group) REQUIRE g.name IS UNIQUE`);
+
+		await session.run(`
+			MATCH (f:FileSystemItem)
+			WHERE f.isDir = false AND f.name CONTAINS '.'
+			WITH f, toLower(split(f.name, '.')[-1]) as ext
+			MERGE (t:Tag {name: ext})
+			ON CREATE SET t.color = CASE ext
+			  WHEN 'mov' THEN '#1F77B4'
+			  WHEN 'mp4' THEN '#1F77B4'
+			  WHEN 'wav' THEN '#FF7F0E'
+			  WHEN 'mp3' THEN '#FF7F0E'
+			  WHEN 'jpg' THEN '#2CA02C'
+			  WHEN 'jpeg' THEN '#2CA02C'
+			  WHEN 'png' THEN '#2CA02C'
+			  WHEN 'pdf' THEN '#9467BD'
+			  ELSE '#7F7F7F' END
+			MERGE (f)-[:TAGGED_WITH]->(t)
+		`);
+
+		const rootSidecarDir = './src/datasets/sidecars';
+		if (fs.existsSync(rootSidecarDir)) {
+			const files = fs.readdirSync(rootSidecarDir);
+			for (const file of files) {
+				if (!file.endsWith('.json')) continue;
+				const full = path.join(rootSidecarDir, file);
+				try {
+					const data = JSON.parse(fs.readFileSync(full, 'utf-8'));
+					if (data && data.path && data.color) {
+						await session.run(`
+							MATCH (d:FileSystemItem {path: $path})
+							WHERE d.isDir = true
+							SET d.folderColor = $color, d.role = COALESCE($role, d.role)
+						`, { path: data.path, color: data.color, role: data.role || null });
+					}
+					if (data && data.path && Array.isArray(data.tags) && data.tags.length) {
+						for (const tag of data.tags) {
+							await session.run(`
+								MERGE (t:Tag {name: $name})
+								ON CREATE SET t.color = $color
+								WITH t
+								MATCH (d:FileSystemItem {path: $path})
+								MERGE (d)-[:TAGGED_WITH]->(t)
+							`, { name: tag.name, color: tag.color || '#7F7F7F', path: data.path });
+						}
+					}
+				} catch (e) {
+					console.warn('Failed reading sidecar', full, e.message);
+				}
+			}
+		}
+	} finally {
+		await session.close();
+	}
+}
+
 async function main() {
   try {
     console.log('🚀 Starting Neo4j streaming data ingestion...');
@@ -229,4 +290,4 @@ main().catch(error => {
   process.exit(1);
 });
 
-export { ingestDatasetStreaming, processItem, driver };
+export { ingestDatasetStreaming, processItem, driver, augmentWithSidecarsAndTags };

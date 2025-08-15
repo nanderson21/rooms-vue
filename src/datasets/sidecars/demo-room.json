@@ -1,0 +1,9 @@
+{
+	"path": "/Demo",
+	"role": "room",
+	"color": "#3c5a9b",
+	"tags": [
+		{ "name": "room", "color": "#3c5a9b" },
+		{ "name": "demo", "color": "#1f77b4" }
+	]
+}
