@@ -1183,7 +1183,8 @@ export default {
       // URL State Management
       updateUrlFromState,
       loadStateFromUrl,
-      handleRoomPermissionRequest
+      handleRoomPermissionRequest,
+      route
     };
   }
 }

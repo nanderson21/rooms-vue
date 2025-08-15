@@ -186,7 +186,17 @@
         <div class="comment-input-area detail-element">
           <div class="comment-input-container">
             <div v-if="showTimestamp" class="comment-timestamp">
-              Add a comment at <span class="comment-timestamp-time">{{ formatTime(currentTime) }}</span>
+              Add a comment at 
+              <TimecodeDisplay 
+                :currentTime="currentTime"
+                :duration="duration"
+                :framerate="actualFramerate"
+                :framerateInfo="framerateInfo"
+                format="smpte"
+                :showFormatSelector="false"
+                :showCopyButton="false"
+                :clickable="false"
+              />
             </div>
             <textarea 
               ref="commentInput"
@@ -337,13 +347,19 @@
                     <span class="comment-time">{{ formatRelativeTime(comment.createdAt) }}</span>
                   </div>
                   <p class="comment-content">
-                    <button 
+                    <TimecodeDisplay 
                       v-if="isVideo"
-                      class="timestamp-button"
+                      :currentTime="comment.timestamp"
+                      :duration="duration"
+                      :framerate="actualFramerate"
+                      :framerateInfo="framerateInfo"
+                      format="smpte"
+                      :showFormatSelector="false"
+                      :showCopyButton="false"
+                      :clickable="true"
                       @click="seekToTimestamp(comment.timestamp)"
-                    >
-                      {{ formatTime(comment.timestamp) }}
-                    </button>
+                      class="comment-timestamp-display"
+                    />
                     <span class="comment-text">{{ comment.content }}</span>
                   </p>
                   <div class="comment-actions">
@@ -397,8 +413,62 @@
             </div>
           </div>
 
-          <!-- Dimensions (for video and image) -->
-          <div v-if="isVideo || isImage" class="info-section">
+          <!-- Video Technical Information (MediaInfo) -->
+          <div v-if="isVideo && mediaInfoMetadata" class="info-section">
+            <h4 class="info-section-title">Video Information</h4>
+            <div class="info-item">
+              <span class="info-label">Resolution</span>
+              <span class="info-value">{{ mediaInfoMetadata.width || mediaItem.width || '—' }} x {{ mediaInfoMetadata.height || mediaItem.height || '—' }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Duration</span>
+              <span class="info-value">{{ formatTime(mediaInfoMetadata.duration || duration) }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Framerate</span>
+              <span class="info-value">{{ mediaInfoMetadata.framerateString || actualFramerate + ' fps' }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Framerate Mode</span>
+              <span class="info-value">{{ mediaInfoMetadata.framerateMode || '—' }}</span>
+            </div>
+            <div class="info-item">
+              <span class="info-label">Codec</span>
+              <span class="info-value">{{ mediaInfoMetadata.codec || '—' }}</span>
+            </div>
+            <div v-if="mediaInfoMetadata.profile" class="info-item">
+              <span class="info-label">Profile</span>
+              <span class="info-value">{{ mediaInfoMetadata.profile }}</span>
+            </div>
+            <div v-if="mediaInfoMetadata.bitrate" class="info-item">
+              <span class="info-label">Bitrate</span>
+              <span class="info-value">{{ Math.round(mediaInfoMetadata.bitrate / 1000).toLocaleString() }} kbps</span>
+            </div>
+            <div v-if="mediaInfoMetadata.colorSpace" class="info-item">
+              <span class="info-label">Color Space</span>
+              <span class="info-value">{{ mediaInfoMetadata.colorSpace }}</span>
+            </div>
+          </div>
+          
+          <!-- MediaInfo Analysis Status -->
+          <div v-if="isVideo" class="info-section">
+            <h4 class="info-section-title">Analysis Status</h4>
+            <div class="info-item">
+              <span class="info-label">Metadata Source</span>
+              <span class="info-value">{{ mediaInfoMetadata?.extractionMethod === 'mediainfo.js' ? 'MediaInfo.js (Accurate)' : 'HTML5 (Basic)' }}</span>
+            </div>
+            <div v-if="framerateInfo?.format" class="info-item">
+              <span class="info-label">Format Standard</span>
+              <span class="info-value">{{ framerateInfo.format.description || framerateInfo.format.name }}</span>
+            </div>
+            <div v-if="mediaInfoMetadata?.extractionError" class="info-item">
+              <span class="info-label">Extraction Error</span>
+              <span class="info-value error-text">{{ mediaInfoMetadata.extractionError }}</span>
+            </div>
+          </div>
+
+          <!-- Dimensions (for non-video media or when MediaInfo unavailable) -->
+          <div v-if="(isVideo && !mediaInfoMetadata) || (isImage)" class="info-section">
             <h4 class="info-section-title">Dimensions</h4>
             <div v-if="mediaItem.width && mediaItem.height" class="info-item">
               <span class="info-label">Resolution</span>
@@ -421,12 +491,15 @@ import { useRoute, useRouter } from 'vue-router';
 import { getRoom, getMediaItem, getComments, addComment as addCommentToStore } from '@/utils/mockData';
 import { roomService } from '@/services/roomService.js';
 import VideoPlayerWithComments from '@/components/VideoPlayerWithComments.vue';
+import TimecodeDisplay from '@/components/TimecodeDisplay.vue';
+import { getFramerateInfo } from '@/services/mediaInfoService.js';
 
 export default {
   name: 'RoomItemDetail',
   
   components: {
-    VideoPlayerWithComments
+    VideoPlayerWithComments,
+    TimecodeDisplay
   },
 
   props: {
@@ -468,7 +541,14 @@ export default {
     const currentTime = ref(0);
     const duration = ref(0);
     const newComment = ref('');
-    const showTimestamp = ref(false);
+    const showTimestamp = ref(true); // Start with true to prevent UI jumping
+    
+    // MediaInfo framerate data
+    const actualFramerate = ref(30); // Will be updated by MediaInfo
+    const framerateInfo = ref(null);
+    
+    // Complete MediaInfo metadata for Info tab
+    const mediaInfoMetadata = ref(null);
     
     // Computed values
     const roomId = computed(() => props.roomId || route.params.id || 'nab-demo');
@@ -507,6 +587,11 @@ export default {
           const file = await mediaItem.value.fileHandle.getFile();
           videoSrc.value = URL.createObjectURL(file);
           console.log('Created video blob URL for FileSystem file:', videoSrc.value);
+          
+          // Extract framerate using MediaInfo for video files
+          if (isVideo.value) {
+            extractFramerate(file);
+          }
         } catch (error) {
           console.error('Error creating video blob URL:', error);
           videoSrc.value = '';
@@ -516,6 +601,37 @@ export default {
         videoSrc.value = mediaItem.value.previewVideo;
       } else {
         videoSrc.value = '';
+      }
+    };
+    
+    // Extract accurate framerate using MediaInfo
+    const extractFramerate = async (file) => {
+      try {
+        console.log('Extracting framerate using MediaInfo for:', file.name);
+        const framerateData = await getFramerateInfo(file);
+        
+        actualFramerate.value = framerateData.framerate;
+        framerateInfo.value = framerateData;
+        
+        // Store complete MediaInfo metadata for Info tab
+        if (framerateData.metadata) {
+          mediaInfoMetadata.value = framerateData.metadata;
+          console.log('Stored complete MediaInfo metadata:', framerateData.metadata);
+        }
+        
+        console.log('MediaInfo framerate extraction result:', {
+          framerate: framerateData.framerate,
+          format: framerateData.format?.name,
+          isAccurate: framerateData.isAccurate,
+          method: framerateData.metadata?.extractionMethod
+        });
+        
+      } catch (error) {
+        console.error('Failed to extract framerate with MediaInfo:', error);
+        // Keep default framerate on error
+        actualFramerate.value = 30;
+        framerateInfo.value = null;
+        mediaInfoMetadata.value = null;
       }
     };
     
@@ -963,6 +1079,10 @@ export default {
       formatRelativeTime,
       getInitials,
       addComment,
+      actualFramerate,
+      framerateInfo,
+      mediaInfoMetadata,
+      extractFramerate,
       isEmbedded: props.isEmbedded
     };
   }
@@ -1722,5 +1842,25 @@ export default {
 
 .info-value {
   color: #111827;
+}
+
+.info-value.error-text {
+  color: #ef4444;
+  font-style: italic;
+}
+
+/* TimecodeDisplay integration styles */
+.comment-timestamp-display {
+  margin-right: 8px;
+  font-size: 12px;
+}
+
+.comment-timestamp {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: #6b7280;
 }
 </style>

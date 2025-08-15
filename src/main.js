@@ -39,7 +39,8 @@ import {
   faCog,
   faLock,
   faDatabase,
-  faTrash
+  faTrash,
+  faHome
 } from '@fortawesome/free-solid-svg-icons'
 
 // Add icons to the library
@@ -67,7 +68,8 @@ library.add(
   faCog,
   faLock,
   faDatabase,
-  faTrash
+  faTrash,
+  faHome
 )
 
 // Define a proper polyfill for browsers that don't support View Transitions API

@@ -488,6 +488,13 @@ export default {
 
     // Select a media item for detailed view
     const selectMediaItem = (item) => {
+      // Prevent double-selection of the same item
+      if (selectedItemId.value === item.id) {
+        console.log('Item already selected, ignoring duplicate selection:', item.id);
+        return;
+      }
+      
+      console.log('Selecting media item:', item.id, item.title);
       selectedMediaItem.value = item;
       setSelectedItem(item.id);
       emit('item-selected', item);
@@ -513,7 +520,10 @@ export default {
     // Handle thumbnail loading errors
     const handleThumbnailError = (event) => {
       console.warn('Thumbnail failed to load:', event.target.src);
-      // Could set a fallback or error state here
+      // Set fallback image for failed thumbnails
+      event.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjZjNmNGY2Ii8+CjxwYXRoIGQ9Ik0xMiA4VjE2TTggMTJIMTYiIHN0cm9rZT0iIzZiNzI4MCIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiLz4KPC9zdmc+';
+      // Remove the error handler to prevent infinite loops
+      event.target.onerror = null;
     };
     
     // Helper functions to determine item type
@@ -603,7 +613,7 @@ export default {
     watch(() => [props.selectedFileId, items.value], ([fileId, itemsArray]) => {
       if (fileId && itemsArray?.length && !selectedMediaItem.value) {
         const item = itemsArray.find(item => item.id === fileId);
-        if (item) {
+        if (item && selectedItemId.value !== item.id) { // Avoid duplicate selection
           console.log('Auto-selecting media item after items loaded:', item);
           selectedMediaItem.value = item;
           setSelectedItem(item.id);
